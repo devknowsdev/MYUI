@@ -1282,6 +1282,10 @@ ${body}
     );
   }
 
+  function isMyuiShadowNode(node) {
+    return !!node && node.getRootNode?.() === shadow;
+  }
+
   function resolveEditableField(node) {
     let el = node;
     while (el && el !== document.documentElement && el !== document.body) {
@@ -2221,8 +2225,18 @@ ${body}
 
   function quickHotkeyList(section) {
     const key = quickHotkeySectionKey(section);
-    if (key === "connect") return sortedConnectives();
-    if (key === "phrases") return state.quickPhrases || [];
+    if (key === "connect") {
+      const list = sortedConnectives();
+      return state.quickConnectOrderMode === "az"
+        ? [...list].sort((a, b) => a.localeCompare(b))
+        : list;
+    }
+    if (key === "phrases") {
+      const list = state.quickPhrases || [];
+      return state.quickPhrasesOrderMode === "az"
+        ? [...list].sort((a, b) => (a.text || "").localeCompare(b.text || ""))
+        : list;
+    }
     return state.sessionItems;
   }
 
@@ -2601,6 +2615,10 @@ ${body}
     const target = path[0] || event.target;
     const activeShadowEl = shadow?.activeElement;
     const composerKeyActive = activeShadowEl?.id === "bp-composer-text";
+    const myuiEditableTarget = isEditableNode(target) && isMyuiShadowNode(target) &&
+      target?.id !== "bp-search" && target?.id !== "bp-composer-text";
+    const myuiEditableActive = isEditableNode(activeShadowEl) && isMyuiShadowNode(activeShadowEl) &&
+      activeShadowEl?.id !== "bp-search" && activeShadowEl?.id !== "bp-composer-text";
     if (composerKeyActive && (
       rawKey.length === 1 ||
       rawKey === "Backspace" || rawKey === "ArrowLeft" || rawKey === "ArrowRight" ||
@@ -2608,6 +2626,7 @@ ${body}
     )) {
       return;
     }
+    if (myuiEditableTarget || myuiEditableActive) return;
     if (rawKey === "Backspace") {
       const composeActive = activeShadowEl?.id === "bp-composer-text";
       if (!composeActive && !isEditableNode(target) && !isEditableNode(activeShadowEl)) {
