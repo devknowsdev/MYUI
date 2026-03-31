@@ -2237,7 +2237,12 @@ ${body}
         ? [...list].sort((a, b) => (a.text || "").localeCompare(b.text || ""))
         : list;
     }
-    return state.sessionItems;
+    const list = state.sessionItems;
+    return state.quickTermsViewMode === "az"
+      ? [...list].sort((a, b) => String(a?.text || a?.p || a?.shortcut || a?.key || "").localeCompare(
+          String(b?.text || b?.p || b?.shortcut || b?.key || "")
+        ))
+      : list;
   }
 
   function quickHotkeyOffsetKey(section) {
