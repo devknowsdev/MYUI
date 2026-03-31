@@ -2215,6 +2215,35 @@ ${body}
     return list.slice(start, start + HOTKEY_WINDOW_SIZE);
   }
 
+  function quickHotkeySectionKey(section = state.quickLastActiveSection) {
+    return section === "connect" || section === "phrases" ? section : "terms";
+  }
+
+  function quickHotkeyList(section) {
+    const key = quickHotkeySectionKey(section);
+    if (key === "connect") return sortedConnectives();
+    if (key === "phrases") return state.quickPhrases || [];
+    return state.sessionItems;
+  }
+
+  function quickHotkeyOffsetKey(section) {
+    const key = quickHotkeySectionKey(section);
+    if (key === "connect") return "quickConnHotkeyOffset";
+    if (key === "phrases") return "quickPhrasesHotkeyOffset";
+    return "quickTermsHotkeyOffset";
+  }
+
+  function scrollQuickHotkeyWindow(direction, section = state.quickLastActiveSection) {
+    const offsetKey = quickHotkeyOffsetKey(section);
+    const list = quickHotkeyList(section);
+    const maxOffset = Math.max(0, list.length - HOTKEY_WINDOW_SIZE);
+    state[offsetKey] = clamp(state[offsetKey] + (direction * HOTKEY_PAGE_STEP), 0, maxOffset);
+  }
+
+  function resetQuickHotkeyWindow(section = state.quickLastActiveSection) {
+    state[quickHotkeyOffsetKey(section)] = 0;
+  }
+
   function applyModifierToText(text, modifier) {
     if (!modifier || !text) return text;
     if (modifier === "plural") return text.replace(/y$/, "ies").replace(/([^s])$/, "$1s");
@@ -2613,11 +2642,10 @@ ${body}
     const searchInputEl = shadow?.getElementById("bp-search");
     if (document.activeElement === searchInputEl || activeShadowEl === searchInputEl) return;
     const quickActive = state.sessionOpen && !state.sessionMinimized;
-    const quickComposePinned = state.quickComposePinned || state.composerStealing;
     const quickTarget = state.quickAltTarget === "phrases" ? "phrases" : "connect";
-    const quickTermsList = getQuickTermsList();
-    const quickConnList = getHotkeyWindow(sortedConnectives(), state.quickConnHotkeyOffset || 0);
-    const quickPhrasesList = getHotkeyWindow((state.quickPhrases || []).map((item) => item.text), state.quickPhrasesHotkeyOffset || 0);
+    const quickTermsList = getHotkeyWindow(quickHotkeyList("terms"), state.quickTermsHotkeyOffset || 0);
+    const quickConnList = getHotkeyWindow(quickHotkeyList("connect"), state.quickConnHotkeyOffset || 0);
+    const quickPhrasesList = getHotkeyWindow(quickHotkeyList("phrases"), state.quickPhrasesHotkeyOffset || 0);
 
     if (!quickActive && rawKey === "Escape" && state.quickHotkeysArmed) {
       event.preventDefault();
@@ -2670,6 +2698,7 @@ ${body}
       if (rawKey === "/") {
         event.preventDefault();
         state.quickAltTarget = quickTarget === "connect" ? "phrases" : "connect";
+        state.quickLastActiveSection = state.quickAltTarget;
         savePrefs();
         render();
         return;
@@ -2696,7 +2725,20 @@ ${body}
       const termsIdx = TERMS_HOTKEYS.indexOf(rawKey);
       if (termsIdx !== -1) {
         event.preventDefault();
-        fireQuickTermAtIndex(termsIdx);
+        const item = quickTermsList[termsIdx];
+        if (!item) return;
+        const term = TERM_MAP.get(item.key) || null;
+        const modifier = state.quickModifierArmed ? state.quickModifier : null;
+        const rawText = term
+          ? (activeInsertText(term, activeCategoryRoute(term) || "") || item.text || "")
+          : (item.text || "");
+        const text = modifier
+          ? (term ? applyTermModifier(term, modifier) : applyModifierToText(rawText, modifier))
+          : rawText;
+        state.quickLastActiveSection = "terms";
+        state.quickModifier = null;
+        state.quickModifierArmed = false;
+        routeInsert(text, "term");
         render();
         return;
       }
@@ -2704,8 +2746,16 @@ ${body}
       const connIdx = CONN_HOTKEYS.indexOf(rawKey);
       if (connIdx !== -1) {
         event.preventDefault();
-        if (quickTarget === "phrases") fireQuickPhraseAtIndex(connIdx);
-        else fireQuickConnectiveAtIndex(connIdx);
+        const key = quickTarget === "phrases" ? "phrases" : "connect";
+        const item = key === "phrases" ? quickPhrasesList[connIdx] : quickConnList[connIdx];
+        if (!item) return;
+        const rawText = typeof item === "string" ? item : (item.text || item.p || "");
+        const modifier = state.quickModifierArmed ? state.quickModifier : null;
+        const text = modifier ? applyModifierToText(rawText, modifier) : rawText;
+        state.quickLastActiveSection = key;
+        state.quickModifier = null;
+        state.quickModifierArmed = false;
+        routeInsert(text, key === "connect" ? "connector" : "term");
         render();
         return;
       }
@@ -2907,7 +2957,7 @@ ${body}
       render();
       window.addEventListener("resize", () => {
         state.panelWidth = clamp(state.panelWidth, PANEL_MIN_WIDTH, Math.min(window.innerWidth - 20, PANEL_MAX_WIDTH));
-        state.panelHeight = clamp(state.panelHeight, PANEL_MIN_HEIGHT, Math.min(window.innerWidth - 20, PANEL_MAX_HEIGHT));
+        state.panelHeight = clamp(state.panelHeight, PANEL_MIN_HEIGHT, Math.min(window.innerHeight - 20, PANEL_MAX_HEIGHT));
         const pos = clampFloatPosition(state.floatX, state.floatY);
         state.floatX = pos.x;
         state.floatY = pos.y;
@@ -5097,6 +5147,7 @@ function renderEditorView() {
       const cycleNext = t.closest("[data-qs-cycle-next]");
       if (cycleNext) {
         const key = cycleNext.dataset.qsCycleNext;
+        state.quickLastActiveSection = quickHotkeySectionKey(key);
         const list = key === "terms" ? state.sessionItems
                    : key === "connect" ? [...getConnectives(), ...state.listenConnectives]
                    : (state.quickPhrases || []);
@@ -5110,6 +5161,7 @@ function renderEditorView() {
       const cyclePrev = t.closest("[data-qs-cycle-prev]");
       if (cyclePrev) {
         const key = cyclePrev.dataset.qsCyclePrev;
+        state.quickLastActiveSection = quickHotkeySectionKey(key);
         const offsetKey = key === "terms" ? "quickTermsHotkeyOffset"
                         : key === "connect" ? "quickConnHotkeyOffset"
                         : "quickPhrasesHotkeyOffset";
@@ -5208,6 +5260,7 @@ function renderEditorView() {
         }
         const phrase = (state.quickPhrases || []).find(p => p.id === id);
         if (phrase && phrase.text) {
+          state.quickLastActiveSection = "phrases";
           routeInsert(phrase.text, "term");
           render();
         }
@@ -5266,6 +5319,7 @@ function renderEditorView() {
         // In move mode, pill click selects — handled above by data-move-select.
         // Guard here prevents double-fire; move-select handler already returned.
         if (state.quickMoveMode === "terms") return;
+        state.quickLastActiveSection = "terms";
         writeSessionItem(Number(sessionWrite.dataset.sessionWrite), event);
         return;
       }
@@ -5518,6 +5572,7 @@ function renderEditorView() {
       if (stripPill) {
         const key = stripPill.dataset.stripKey;
         const idx = Number(stripPill.dataset.stripIdx);
+        state.quickLastActiveSection = quickHotkeySectionKey(key);
         let list = [];
         if (key === "terms") list = state.sessionItems;
         else if (key === "connect") list = [...getConnectives(), ...state.listenConnectives];
@@ -6281,6 +6336,7 @@ function renderEditorView() {
       const connInsert = t.closest("[data-conn-insert]");
       if (connInsert && !state.connDeleteArmed) {
         const word = connInsert.dataset.connInsert;
+        state.quickLastActiveSection = "connect";
         routeInsert(word, "connector");
         render();
         return;
