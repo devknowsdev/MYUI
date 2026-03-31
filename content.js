@@ -1551,6 +1551,22 @@ ${body}
 
   function handleTermActivation(term, key, hasDef, event) {
     const writeTarget = resolveWriteVariantTerm(term, event);
+    const quickTagComposeOpen = !!(state.appActive && state.sessionOpen && !state.sessionMinimized);
+
+    if (!quickTagComposeOpen) {
+      const sourceEl = event?.target?.closest?.(".term-card, .variant-pill") || null;
+      const keepHoverPreview = !!sourceEl?.matches?.(":hover");
+      if (state.pinnedKey === key) {
+        state.pinnedKey = "";
+        if (!keepHoverPreview) state.previewKey = "";
+      } else {
+        state.pinnedKey = key;
+        state.previewKey = key;
+      }
+      updateHelpHighlight();
+      syncHoverTooltip();
+      return;
+    }
 
     // Sentence mode: composer only, never session
     if (state.fullSentenceMode && state.composerFocused) {
