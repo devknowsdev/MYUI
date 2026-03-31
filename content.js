@@ -1554,9 +1554,11 @@ ${body}
     const quickTagComposeOpen = !!(state.appActive && state.sessionOpen && !state.sessionMinimized);
 
     if (!quickTagComposeOpen) {
+      const sourceEl = event?.target?.closest?.(".term-card, .variant-pill") || null;
+      const keepHoverPreview = !!sourceEl?.matches?.(":hover");
       if (state.pinnedKey === key) {
         state.pinnedKey = "";
-        if (!state.helpHover) state.previewKey = "";
+        if (!keepHoverPreview) state.previewKey = "";
       } else {
         state.pinnedKey = key;
         state.previewKey = key;
