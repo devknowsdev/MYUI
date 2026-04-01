@@ -3303,7 +3303,7 @@ ${csv}`;
       applyModifierToText, applyTermModifier,
       // — field arming —
       resolveEditableField, armWriteField, captureArmedFieldSelectionFromPointer,
-      focusComposerAfterArming, scheduleFieldArmFinalize,
+      focusComposerAfterArming,
       // — term activation —
       handleTermActivation, flashTermByKey, insertIntoField, routeInsert,
       smartInsertTermText,
@@ -7074,7 +7074,7 @@ function bindResize() {
     applyModifierToText, applyTermModifier,
     // — field arming —
     resolveEditableField, armWriteField, captureArmedFieldSelectionFromPointer,
-    focusComposerAfterArming, scheduleFieldArmFinalize,
+    focusComposerAfterArming,
     // — term activation —
     handleTermActivation, flashTermByKey, insertIntoField, routeInsert,
     smartInsertTermText,
