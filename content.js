@@ -3071,6 +3071,14 @@ ${body}
     state.listenConnectives = [];
   }
 
+  // ── Persistence module (explicit deps for future extraction) ──
+  function createPersistModule(deps) {
+    const {
+      state, clamp, clampFloatPosition, clampSessionPosition,
+      STORAGE_KEY, LEGACY_STORAGE_KEYS, PAGE_STORAGE_KEY, MYUI_BUILD,
+      PANEL_MIN_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT,
+    } = deps;
+
   function buildPrefsSnapshot() {
     return {
       visible: state.visible,
@@ -3317,6 +3325,15 @@ ${body}
       if (maybe?.catch) maybe.catch(() => {});
     } catch (_) {}
   }
+
+    return { buildPrefsSnapshot, readPageStorage, applyPrefs, loadPrefs, savePrefs };
+  }
+
+  const { buildPrefsSnapshot, readPageStorage, applyPrefs, loadPrefs, savePrefs } = createPersistModule({
+    state, clamp, clampFloatPosition, clampSessionPosition,
+    STORAGE_KEY, LEGACY_STORAGE_KEYS, PAGE_STORAGE_KEY, MYUI_BUILD,
+    PANEL_MIN_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT,
+  });
 
   async function devReset() {
     const confirmed = window.confirm("Hard reset MYUI? This clears all saved MYUI data, including templates, edited terms, and settings.");
