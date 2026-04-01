@@ -1240,17 +1240,6 @@ ${body}
     return true;
   }
 
-  function scheduleFieldArmFinalize(field, composeSnapshot = null) {
-    setTimeout(() => {
-      if (lastFocusedField !== field || !document.contains(field)) return;
-      snapshotArmedFieldSelection(field);
-      setTimeout(() => {
-        if (lastFocusedField !== field || !document.contains(field)) return;
-        focusComposerAfterArming(composeSnapshot, { keepSelection: true });
-      }, 0);
-    }, 0);
-  }
-
   function captureArmedFieldSelectionFromPointer(field, event) {
     if (!field || !event) return snapshotArmedFieldSelection(field);
     if (field.isContentEditable || field.getAttribute?.("contenteditable") === "true" || field.getAttribute?.("role") === "textbox") {
@@ -2898,13 +2887,8 @@ ${body}
       if (host?.contains(target)) return;
       const field = resolveEditableField(target);
       if (!field) return;
-      const composeSnapshot = composerInputSnapshot();
-      const changed = armWriteField(field);
-      try { event.preventDefault(); } catch (_) {}
+      armWriteField(field);
       captureArmedFieldSelectionFromPointer(field, event);
-      focusComposerAfterArming(composeSnapshot, { keepSelection: true });
-      scheduleFieldArmFinalize(field, composeSnapshot);
-      if (changed) render();
     }, true);
 
     document.addEventListener("selectionchange", () => {
@@ -3188,6 +3172,7 @@ ${body}
       renderScheduled = false;
       const searchSnapshot = searchInputSnapshot();
       const qsSnapshot = qsInputSnapshot();
+      const composerSnapshot = composerInputSnapshot();
       state.hoverTooltipTitle = "";
       state.hoverTooltipBody = "";
       const isOpen = state.visible;
@@ -3208,6 +3193,7 @@ ${body}
       bindEvents();
       restoreSearchInput(searchSnapshot);
       restoreQsInput(qsSnapshot);
+      restoreComposerInput(composerSnapshot);
       updateHelpHighlight();
       syncHoverTooltip();
       syncToolTrayViewport();
@@ -4358,7 +4344,7 @@ function renderHelpPane() {
 
   const workflows = [
     ["Live mode", "Turn on Live to publish clicked terms, connectors, phrases, and tool prints into Quick-Tag Compose. Compose is the default surface; Print can target an explicitly armed page field."],
-    ["Compose with pills", "Compose stays visible at the top of Quick-Tag. Each term or connector click adds a pill to the preview tray above the textarea. Click a pill to select it — subsequent insertions land after it. Drag pills to reorder. ← → buttons move the selected pill. Press , or . in the textarea to insert punctuation pills (period sets capitalise-next). Backspace at position 0 removes the last or selected pill."],
+    ["Compose with pills", "Compose stays visible at the top of Quick-Tag. Each term or connector click adds a pill to the preview tray above the textarea. Click a pill to select it — subsequent insertions land after it. Drag pills to reorder. ← → buttons move the selected pill. Press , or . in the textarea to insert punctuation pills (period sets capitalise-next). Backspace removes a selected pill."],
     ["Hotkey workflow", "Keep Quick open. Use Shift+1–0 (!@#$%^&*()) to fire session terms by position in the current window. Use Alt+1–0 to fire connect or phrases items (/ toggles which). Use = / − to scroll the window forward/back. The top-4 strip in each section header mirrors the first four items for click access without keyboard."],
     ["Modifiers", "Press : to arm plural, , to arm adverb (–ly), | to arm secondary variant. The strip pills turn orange when armed. The next hotkey or strip-click applies the modifier and disarms. If Compose is pinned with a pill selected, arming applies the modifier immediately to that pill."],
     ["Terms view modes", "The Terms section has three views — User (insertion order, paged), A–Z (alphabetical), Cat (grouped by section). In Cat mode, press the section letter (c/f/s/r/i/m) to expand/collapse a group, then 1–9/0 to fire an item from that group. 📌 pins a group open permanently."],
@@ -4383,7 +4369,7 @@ function renderHelpPane() {
     ["|", "Arm secondary-variant modifier (press again to disarm)"],
     ["c f s r i m", "Cat view: expand/collapse section group (Connect/Feel/Sound/foRm/Instruments/Mix)"],
     [", / .", "In pinned Compose textarea: insert comma or period pill (. also sets capitalise-next)"],
-    ["Backspace", "In pinned Compose textarea at position 0: remove selected or last pill"],
+    ["Backspace", "In pinned Compose textarea: remove a selected pill"],
     ["Tab", "Toggle connectives panel (in composer textarea)"],
     ["⌘+click", "Insert plural form"],
     ["⌥+click", "Insert y/ly variant"],
@@ -5570,23 +5556,13 @@ function renderEditorView() {
       if (t.id === "bp-composer-text" && state.quickComposePinned) {
         const focusSnapshot = composerInputSnapshot() || { focused: true, startFromEnd: 0, endFromEnd: 0 };
 
-        // Backspace: delete selected pill, or pos-0 fallback only
-        if (event.key === "Backspace" && state.composerPills.length > 0) {
-          if (state.composerSelectedPillId !== null) {
-            event.preventDefault();
-            state.composerPills = state.composerPills.filter(p => p.id !== state.composerSelectedPillId);
-            state.composerSelectedPillId = state.composerPills.length > 0
-              ? state.composerPills[state.composerPills.length - 1].id : null;
-            syncComposerText({ focusSnapshot }); return;
-          }
-          if (t.selectionStart === 0 && t.selectionEnd === 0) {
-            event.preventDefault();
-            const targetId = state.composerPills[state.composerPills.length - 1].id;
-            state.composerPills = state.composerPills.filter(p => p.id !== targetId);
-            state.composerSelectedPillId = state.composerPills.length > 0
-              ? state.composerPills[state.composerPills.length - 1].id : null;
-            syncComposerText({ focusSnapshot }); return;
-          }
+        // Backspace: delete selected pill only
+        if (event.key === "Backspace" && state.composerPills.length > 0 && state.composerSelectedPillId !== null) {
+          event.preventDefault();
+          state.composerPills = state.composerPills.filter(p => p.id !== state.composerSelectedPillId);
+          state.composerSelectedPillId = state.composerPills.length > 0
+            ? state.composerPills[state.composerPills.length - 1].id : null;
+          syncComposerText({ focusSnapshot }); return;
         }
 
         // ArrowLeft / ArrowRight: move selected pill when one is selected
@@ -5759,19 +5735,20 @@ function renderEditorView() {
 
     contentNode.addEventListener("focusout", (event) => {
       if (event.target.id === "bp-composer-text") {
-        setTimeout(() => {
-          if (shadow.activeElement?.id !== "bp-composer-text") state.composerFocused = false;
-        }, 100);
+        const related = event.relatedTarget;
+        const staysInComposer = related && (
+          related.id === "bp-composer-text" ||
+          related.closest?.(".composer-bar") ||
+          related.closest?.(".qs-compose-shell")
+        );
+        if (!staysInComposer) state.composerFocused = false;
       }
     });
 
     contentNode.addEventListener("mousedown", (event) => {
-      const t = event.target;
-      if (t?.id !== "bp-composer-text") return;
-      state.composerFocused = true;
-      setTimeout(() => {
-        shadow.getElementById("bp-composer-text")?.focus({ preventScroll: true });
-      }, 0);
+      if (event.target?.id === "bp-composer-text") {
+        state.composerFocused = true;
+      }
     });
 
     contentNode.addEventListener("input", (event) => {
