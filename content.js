@@ -3153,6 +3153,178 @@ ${body}
     saveMasterRows("Restored defaults");
   }
 
+  function confirmTempTermAdd() {
+    const text = state.tempTermsPendingText.trim();
+    if (!text) {
+      state.tempTermsAwaitingShortcut = false;
+      render(); return;
+    }
+    const shortcut = state.tempTermsShortcutInput.trim();
+    const entry = shortcut ? { text, shortcut, source: "manual" } : text;
+    const norm = normalize(text);
+    if (!state.undefinedTerms.some(u => normalize(undefinedTermText(u)) === norm)) {
+      state.undefinedTerms = [entry, ...state.undefinedTerms].slice(0, 200);
+    }
+    state.tempTermsAwaitingShortcut = false;
+    state.tempTermsPendingText = "";
+    state.tempTermsShortcutInput = "";
+    savePrefs(); render();
+  }
+
+  function confirmTempTermEdit(idx) {
+    const text = state.tempTermsEditText.trim();
+    if (!text) { state.tempTermsEditTarget = null; render(); return; }
+    const shortcut = state.tempTermsEditShortcut.trim();
+    const entry = shortcut ? { text, shortcut, source: "manual" } : text;
+    state.undefinedTerms = state.undefinedTerms.map((u, i) => i === idx ? entry : u);
+    state.tempTermsEditTarget = null;
+    state.tempTermsEditText = "";
+    state.tempTermsEditShortcut = "";
+    savePrefs(); render();
+  }
+
+  function exportTempTermsToAI() {
+    const header = "section_key,category,shortcut,term,notes";
+    const rows = state.undefinedTerms.map(entry => {
+      const text = undefinedTermText(entry);
+      const shortcut = undefinedTermShortcut(entry);
+      return `"","","${shortcut.replace(/"/g, '""')}","${text.replace(/"/g, '""')}",""`;
+    });
+    const csv = [header, ...rows].join("\n");
+    const prompt = `You are preparing a MYUI import dataset.
+
+The CSV below contains uncategorised terms collected during annotation sessions.
+Process ONLY the rows where section_key is empty.
+Do NOT alter rows that already have a section_key.
+
+For each uncategorised term:
+- Assign section_key (one of: connect, feel, sound, form, instruments, mix)
+- Assign category (short grouping label matching existing categories where possible)
+- Propose shortcut if missing (2-6 chars, vowels stripped)
+- Add a one-sentence definition in notes
+- Mark connector/linking words with section_key = connect
+- Prefix uncertain notes with ?
+
+Output the complete CSV including already-categorised rows unchanged.
+Do not add markdown or code fences.
+
+--- CSV ---
+${csv}`;
+    navigator.clipboard?.writeText(prompt).then(() => {
+      state.editorMessage = `Exported ${state.undefinedTerms.length} terms — prompt copied to clipboard`;
+      render();
+    }).catch(() => {
+      state.editorMessage = "Copy failed — check browser permissions";
+      render();
+    });
+  }
+
+  function qsOrderBtn(key) {
+    if (key === "terms") {
+      const labels = { user: "Order: User", az: "Order: A–Z", cat: "Order: Cat" };
+      return `<button class="qs-order-btn" id="bp-terms-view-cycle" type="button" title="Cycle order">${labels[state.quickTermsViewMode] || "Order: User"}</button>`;
+    }
+    if (key === "connect") {
+      return `<button class="qs-order-btn" id="bp-connect-order-cycle" type="button" title="Cycle order">${state.quickConnectOrderMode === "az" ? "Order: A–Z" : "Order: User"}</button>`;
+    }
+    if (key === "phrases") {
+      return `<button class="qs-order-btn" id="bp-phrases-order-cycle" type="button" title="Cycle order">${state.quickPhrasesOrderMode === "az" ? "Order: A–Z" : "Order: User"}</button>`;
+    }
+    return "";
+  }
+
+  // ── Render module ─────────────────────────────────────────────────────────
+  // All functions from renderFieldTargetIndicator through bindFloatTray live
+  // inside this factory.  Mutable IIFE vars (shadow, contentNode, host,
+  // styleNode, renderScheduled, collapseTimer, isResizing, dockDragUntil,
+  // toolUndoStack, toolRedoStack, lastFocusedField, MASTER_ROWS, TERMS, etc.)
+  // are accessed via outer closure; all other deps are explicit below.
+  function createRenderModule(deps) {
+    const {
+      state,
+      // — utilities —
+      esc, normalize, clamp, clampFloatPosition, clampSessionPosition,
+      cssEscape, stripCode, termKey, boolish, titleCase,
+      // — section / category —
+      sectionLabel, sectionDescription, sectionHotkey, sectionSortIndex,
+      sectionIndexByHotkey, displayCategory, categoryMetaFromTerm,
+      activeCategoryRoute, activeSearchScopeLabel, currentSectionEntries,
+      // — data / queries —
+      getConnectives, sortedConnectives,
+      visibleTermsInScope, categorySummaries, categorySearchHaystack,
+      searchOnlyBlocks, matchesQuery, suffixRank, sortTerms, visibleHelpTerms,
+      currentWriteField, currentWriteState, publishTarget,
+      datasetAnchor, cardVars, activeMasterRows, groupedTerms,
+      sectionChipVars, categoryChipVars, topSections, sectionCount,
+      getHelpText,
+      // — editor helpers —
+      editorSections, editorCategories, editorCategoryTemplates, editorVisibleRows,
+      duplicateShortcutConflicts, duplicateTermConflicts,
+      conflictingRows, rowConflictDetails, addInlineCategoryRow, buildSectionMeta,
+      inlineCategoryRows,
+      // — undefined-term helpers —
+      undefinedTermText, undefinedTermShortcut,
+      // — hotkey helpers —
+      getHotkeyWindow, quickHotkeyList, quickHotkeyOffsetKey, pluginHotkeyContext,
+      quickHotkeySectionKey, scrollQuickHotkeyWindow, resetQuickHotkeyWindow,
+      activateSectionHotkey, releaseSectionHotkey,
+      toggleSectionByIndex, toggleCategoryByIndex,
+      // — insert / composer —
+      insertTermIntoFocusedField, insertChips, insertAtComposerCursor,
+      syncComposerText, flushComposerPendingText, reconcileComposerTypedInput,
+      joinComposerPills, getComposerResolvedText, getComposerPendingTextFromValue,
+      composerPillsFromPendingText,
+      // — input snapshots —
+      searchInputSnapshot, restoreSearchInput,
+      qsInputSnapshot, restoreQsInput,
+      composerInputSnapshot, restoreComposerInput,
+      // — search —
+      commitSearch, syncLiveSearch,
+      // — layout —
+      isHorizontalDock, isFloatDock, currentShellWidth, currentShellHeight,
+      shellInlineStyle, snapDockFromPoint, syncPageInset,
+      // — QuickTag ops —
+      addToQsSection, executeQsDelete,
+      addTermToSession, sessionTermAt, writeSessionItem,
+      // — tool tray ops —
+      getToolList, activeInsertText, toolButtonLabel, toolLabel,
+      toolItemText, toolItemDisplay, toolItemLabel,
+      setToolTrayOpen, setToolTrayExpanded, toggleToolTray, ensureToolTrayOpen,
+      undoToolHistory,
+      // — persist —
+      savePrefs, saveMasterRows, restoreDefaultMasterRows,
+      validateAndSetInputTerms, parseInputTerms,
+      exportMasterCsv, exportPlist, downloadText,
+      // — editor ops —
+      createEditorRowFromContext, saveAndExportAll, setEditorMessage,
+      // — session —
+      sanitizeToolList, sanitizeSessionItems, clearSessionWorkingState,
+      // — modifier —
+      applyModifierToText, applyTermModifier,
+      // — field arming —
+      resolveEditableField, armWriteField, captureArmedFieldSelectionFromPointer,
+      focusComposerAfterArming, scheduleFieldArmFinalize,
+      // — term activation —
+      handleTermActivation, flashTermByKey, insertIntoField, routeInsert,
+      smartInsertTermText,
+      // — audio —
+      startListening, stopListening,
+      // — dev —
+      devReset, rebuildRuntimeData,
+      // — non-render action helpers (relocated in step 1) —
+      confirmTempTermAdd, confirmTempTermEdit, exportTempTermsToAI, qsOrderBtn,
+      // — early render helpers (defined before this block) —
+      renderDirtyBanner, renderInlineCategoryEditor,
+      // — constants —
+      MYUI_BUILD, SECTION_HOTKEYS,
+      HOTKEY_WINDOW_SIZE, TERMS_HOTKEYS, CONN_HOTKEYS,
+      PANEL_MIN_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT,
+      SESSION_MIN_WIDTH, SESSION_MAX_WIDTH, SESSION_MIN_HEIGHT, SESSION_MAX_HEIGHT,
+      TOOL_TRAY_WIDTH, ALL_SECTIONS_KEY, TERM_DEF_LOOKUP,
+    } = deps;
+
+    const QUICK_ITEMS_PER_PAGE = 20;
+
   function renderFieldTargetIndicator() {
     const field = currentWriteField();
     if (!field || !document.contains(field) || host?.contains(field)) return "";
@@ -3825,74 +3997,6 @@ function renderDefinitionBar() {
   `;
 }
 
-  function confirmTempTermAdd() {
-    const text = state.tempTermsPendingText.trim();
-    if (!text) {
-      state.tempTermsAwaitingShortcut = false;
-      render(); return;
-    }
-    const shortcut = state.tempTermsShortcutInput.trim();
-    const entry = shortcut ? { text, shortcut, source: "manual" } : text;
-    const norm = normalize(text);
-    if (!state.undefinedTerms.some(u => normalize(undefinedTermText(u)) === norm)) {
-      state.undefinedTerms = [entry, ...state.undefinedTerms].slice(0, 200);
-    }
-    state.tempTermsAwaitingShortcut = false;
-    state.tempTermsPendingText = "";
-    state.tempTermsShortcutInput = "";
-    savePrefs(); render();
-  }
-
-  function confirmTempTermEdit(idx) {
-    const text = state.tempTermsEditText.trim();
-    if (!text) { state.tempTermsEditTarget = null; render(); return; }
-    const shortcut = state.tempTermsEditShortcut.trim();
-    const entry = shortcut ? { text, shortcut, source: "manual" } : text;
-    state.undefinedTerms = state.undefinedTerms.map((u, i) => i === idx ? entry : u);
-    state.tempTermsEditTarget = null;
-    state.tempTermsEditText = "";
-    state.tempTermsEditShortcut = "";
-    savePrefs(); render();
-  }
-
-  function exportTempTermsToAI() {
-    const header = "section_key,category,shortcut,term,notes";
-    const rows = state.undefinedTerms.map(entry => {
-      const text = undefinedTermText(entry);
-      const shortcut = undefinedTermShortcut(entry);
-      return `"","","${shortcut.replace(/"/g, '""')}","${text.replace(/"/g, '""')}",""`;
-    });
-    const csv = [header, ...rows].join("\n");
-    const prompt = `You are preparing a MYUI import dataset.
-
-The CSV below contains uncategorised terms collected during annotation sessions.
-Process ONLY the rows where section_key is empty.
-Do NOT alter rows that already have a section_key.
-
-For each uncategorised term:
-- Assign section_key (one of: connect, feel, sound, form, instruments, mix)
-- Assign category (short grouping label matching existing categories where possible)
-- Propose shortcut if missing (2-6 chars, vowels stripped)
-- Add a one-sentence definition in notes
-- Mark connector/linking words with section_key = connect
-- Prefix uncertain notes with ?
-
-Output the complete CSV including already-categorised rows unchanged.
-Do not add markdown or code fences.
-
---- CSV ---
-${csv}`;
-    navigator.clipboard?.writeText(prompt).then(() => {
-      state.editorMessage = `Exported ${state.undefinedTerms.length} terms — prompt copied to clipboard`;
-      render();
-    }).catch(() => {
-      state.editorMessage = "Copy failed — check browser permissions";
-      render();
-    });
-  }
-
-  const QUICK_ITEMS_PER_PAGE = 20;
-
   function renderQuickHeader(hasItems, undefCount, minLabel) {
     const composeActive = state.quickComposePinned || state.composerStealing;
     const hkArmed = state.quickHotkeysArmed;
@@ -3963,20 +4067,6 @@ ${csv}`;
     if (key === "terms")   return `<span class="qs-hk-hint">⇧1–0</span>`;
     if (key === "connect") return `<span class="qs-hk-hint">⌥1–0</span>`;
     if (key === "phrases") return `<span class="qs-hk-hint">⌥1–0</span>`;
-    return "";
-  }
-
-  function qsOrderBtn(key) {
-    if (key === "terms") {
-      const labels = { user: "Order: User", az: "Order: A–Z", cat: "Order: Cat" };
-      return `<button class="qs-order-btn" id="bp-terms-view-cycle" type="button" title="Cycle order">${labels[state.quickTermsViewMode] || "Order: User"}</button>`;
-    }
-    if (key === "connect") {
-      return `<button class="qs-order-btn" id="bp-connect-order-cycle" type="button" title="Cycle order">${state.quickConnectOrderMode === "az" ? "Order: A–Z" : "Order: User"}</button>`;
-    }
-    if (key === "phrases") {
-      return `<button class="qs-order-btn" id="bp-phrases-order-cycle" type="button" title="Cycle order">${state.quickPhrasesOrderMode === "az" ? "Order: A–Z" : "Order: User"}</button>`;
-    }
     return "";
   }
 
@@ -6912,6 +7002,97 @@ function bindResize() {
       window.addEventListener("pointerup", onUp, { once: true });
     });
   }
+
+    return { render, bindDelegatedEvents, updateHelpHighlight, syncHoverTooltip };
+  }
+
+  const {
+    render,
+    bindDelegatedEvents,
+    updateHelpHighlight,
+    syncHoverTooltip,
+  } = createRenderModule({
+    state,
+    // — utilities —
+    esc, normalize, clamp, clampFloatPosition, clampSessionPosition,
+    cssEscape, stripCode, termKey, boolish, titleCase,
+    // — section / category —
+    sectionLabel, sectionDescription, sectionHotkey, sectionSortIndex,
+    sectionIndexByHotkey, displayCategory, categoryMetaFromTerm,
+    activeCategoryRoute, activeSearchScopeLabel, currentSectionEntries,
+    // — data / queries —
+    getConnectives, sortedConnectives,
+    visibleTermsInScope, categorySummaries, categorySearchHaystack,
+    searchOnlyBlocks, matchesQuery, suffixRank, sortTerms, visibleHelpTerms,
+    currentWriteField, currentWriteState, publishTarget,
+    datasetAnchor, cardVars, activeMasterRows, groupedTerms,
+    sectionChipVars, categoryChipVars, topSections, sectionCount,
+    getHelpText,
+    // — editor helpers —
+    editorSections, editorCategories, editorCategoryTemplates, editorVisibleRows,
+    duplicateShortcutConflicts, duplicateTermConflicts,
+    conflictingRows, rowConflictDetails, addInlineCategoryRow, buildSectionMeta,
+    inlineCategoryRows,
+    // — undefined-term helpers —
+    undefinedTermText, undefinedTermShortcut,
+    // — hotkey helpers —
+    getHotkeyWindow, quickHotkeyList, quickHotkeyOffsetKey, pluginHotkeyContext,
+    quickHotkeySectionKey, scrollQuickHotkeyWindow, resetQuickHotkeyWindow,
+    activateSectionHotkey, releaseSectionHotkey,
+    toggleSectionByIndex, toggleCategoryByIndex,
+    // — insert / composer —
+    insertTermIntoFocusedField, insertChips, insertAtComposerCursor,
+    syncComposerText, flushComposerPendingText, reconcileComposerTypedInput,
+    joinComposerPills, getComposerResolvedText, getComposerPendingTextFromValue,
+    composerPillsFromPendingText,
+    // — input snapshots —
+    searchInputSnapshot, restoreSearchInput,
+    qsInputSnapshot, restoreQsInput,
+    composerInputSnapshot, restoreComposerInput,
+    // — search —
+    commitSearch, syncLiveSearch,
+    // — layout —
+    isHorizontalDock, isFloatDock, currentShellWidth, currentShellHeight,
+    shellInlineStyle, snapDockFromPoint, syncPageInset,
+    // — QuickTag ops —
+    addToQsSection, executeQsDelete,
+    addTermToSession, sessionTermAt, writeSessionItem,
+    // — tool tray ops —
+    getToolList, activeInsertText, toolButtonLabel, toolLabel,
+    toolItemText, toolItemDisplay, toolItemLabel,
+    setToolTrayOpen, setToolTrayExpanded, toggleToolTray, ensureToolTrayOpen,
+    undoToolHistory,
+    // — persist —
+    savePrefs, saveMasterRows, restoreDefaultMasterRows,
+    validateAndSetInputTerms, parseInputTerms,
+    exportMasterCsv, exportPlist, downloadText,
+    // — editor ops —
+    createEditorRowFromContext, saveAndExportAll, setEditorMessage,
+    // — session —
+    sanitizeToolList, sanitizeSessionItems, clearSessionWorkingState,
+    // — modifier —
+    applyModifierToText, applyTermModifier,
+    // — field arming —
+    resolveEditableField, armWriteField, captureArmedFieldSelectionFromPointer,
+    focusComposerAfterArming, scheduleFieldArmFinalize,
+    // — term activation —
+    handleTermActivation, flashTermByKey, insertIntoField, routeInsert,
+    smartInsertTermText,
+    // — audio —
+    startListening, stopListening,
+    // — dev —
+    devReset, rebuildRuntimeData,
+    // — non-render action helpers (relocated in step 1) —
+    confirmTempTermAdd, confirmTempTermEdit, exportTempTermsToAI, qsOrderBtn,
+    // — early render helpers (defined before this block) —
+    renderDirtyBanner, renderInlineCategoryEditor,
+    // — constants —
+    MYUI_BUILD, SECTION_HOTKEYS,
+    HOTKEY_WINDOW_SIZE, TERMS_HOTKEYS, CONN_HOTKEYS,
+    PANEL_MIN_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT,
+    SESSION_MIN_WIDTH, SESSION_MAX_WIDTH, SESSION_MIN_HEIGHT, SESSION_MAX_HEIGHT,
+    TOOL_TRAY_WIDTH, ALL_SECTIONS_KEY, TERM_DEF_LOOKUP,
+  });
 
   init();
 })();
