@@ -1240,17 +1240,6 @@ ${body}
     return true;
   }
 
-  function scheduleFieldArmFinalize(field, composeSnapshot = null) {
-    setTimeout(() => {
-      if (lastFocusedField !== field || !document.contains(field)) return;
-      snapshotArmedFieldSelection(field);
-      setTimeout(() => {
-        if (lastFocusedField !== field || !document.contains(field)) return;
-        focusComposerAfterArming(composeSnapshot, { keepSelection: true });
-      }, 0);
-    }, 0);
-  }
-
   function captureArmedFieldSelectionFromPointer(field, event) {
     if (!field || !event) return snapshotArmedFieldSelection(field);
     if (field.isContentEditable || field.getAttribute?.("contenteditable") === "true" || field.getAttribute?.("role") === "textbox") {
@@ -2825,13 +2814,8 @@ ${body}
       if (host?.contains(target)) return;
       const field = resolveEditableField(target);
       if (!field) return;
-      const composeSnapshot = composerInputSnapshot();
-      const changed = armWriteField(field);
-      try { event.preventDefault(); } catch (_) {}
+      armWriteField(field);
       captureArmedFieldSelectionFromPointer(field, event);
-      focusComposerAfterArming(composeSnapshot, { keepSelection: true });
-      scheduleFieldArmFinalize(field, composeSnapshot);
-      if (changed) render();
     }, true);
 
     document.addEventListener("selectionchange", () => {
@@ -3346,6 +3330,7 @@ ${body}
       renderScheduled = false;
       const searchSnapshot = searchInputSnapshot();
       const qsSnapshot = qsInputSnapshot();
+      const composerSnapshot = composerInputSnapshot();
       state.hoverTooltipTitle = "";
       state.hoverTooltipBody = "";
       const isOpen = state.visible;
@@ -3366,6 +3351,7 @@ ${body}
       bindEvents();
       restoreSearchInput(searchSnapshot);
       restoreQsInput(qsSnapshot);
+      restoreComposerInput(composerSnapshot);
       updateHelpHighlight();
       syncHoverTooltip();
       syncToolTrayViewport();
@@ -5723,23 +5709,13 @@ function renderEditorView() {
       if (t.id === "bp-composer-text" && state.quickComposePinned) {
         const focusSnapshot = composerInputSnapshot() || { focused: true, startFromEnd: 0, endFromEnd: 0 };
 
-        // Backspace: delete selected pill, or pos-0 fallback only
-        if (event.key === "Backspace" && state.composerPills.length > 0) {
-          if (state.composerSelectedPillId !== null) {
-            event.preventDefault();
-            state.composerPills = state.composerPills.filter(p => p.id !== state.composerSelectedPillId);
-            state.composerSelectedPillId = state.composerPills.length > 0
-              ? state.composerPills[state.composerPills.length - 1].id : null;
-            syncComposerText({ focusSnapshot }); return;
-          }
-          if (t.selectionStart === 0 && t.selectionEnd === 0) {
-            event.preventDefault();
-            const targetId = state.composerPills[state.composerPills.length - 1].id;
-            state.composerPills = state.composerPills.filter(p => p.id !== targetId);
-            state.composerSelectedPillId = state.composerPills.length > 0
-              ? state.composerPills[state.composerPills.length - 1].id : null;
-            syncComposerText({ focusSnapshot }); return;
-          }
+        // Backspace: only deletes an explicitly selected pill; otherwise normal textarea behavior
+        if (event.key === "Backspace" && state.composerPills.length > 0 && state.composerSelectedPillId !== null) {
+          event.preventDefault();
+          state.composerPills = state.composerPills.filter(p => p.id !== state.composerSelectedPillId);
+          state.composerSelectedPillId = state.composerPills.length > 0
+            ? state.composerPills[state.composerPills.length - 1].id : null;
+          syncComposerText({ focusSnapshot }); return;
         }
 
         // ArrowLeft / ArrowRight: move selected pill when one is selected
@@ -5912,19 +5888,20 @@ function renderEditorView() {
 
     contentNode.addEventListener("focusout", (event) => {
       if (event.target.id === "bp-composer-text") {
-        setTimeout(() => {
-          if (shadow.activeElement?.id !== "bp-composer-text") state.composerFocused = false;
-        }, 100);
+        const related = event.relatedTarget;
+        const staysInComposer = related && (
+          related.id === "bp-composer-text" ||
+          related.closest?.(".composer-bar") ||
+          related.closest?.(".qs-compose-shell")
+        );
+        if (!staysInComposer) state.composerFocused = false;
       }
     });
 
     contentNode.addEventListener("mousedown", (event) => {
-      const t = event.target;
-      if (t?.id !== "bp-composer-text") return;
-      state.composerFocused = true;
-      setTimeout(() => {
-        shadow.getElementById("bp-composer-text")?.focus({ preventScroll: true });
-      }, 0);
+      if (event.target?.id === "bp-composer-text") {
+        state.composerFocused = true;
+      }
     });
 
     contentNode.addEventListener("input", (event) => {
