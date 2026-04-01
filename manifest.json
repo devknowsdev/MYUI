@@ -34,6 +34,7 @@
       "resources": [
         "terms_data.js",
         "defs_data.js",
+        "persist.js",
         "styles.css"
       ],
       "matches": [
