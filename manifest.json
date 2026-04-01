@@ -33,7 +33,8 @@
     {
       "resources": [
         "terms_data.js",
-        "defs_data.js"
+        "defs_data.js",
+        "styles.css"
       ],
       "matches": [
         "<all_urls>"
