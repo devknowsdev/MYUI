@@ -147,7 +147,7 @@ globalThis.__MYUI_createPersistModule = function createPersistModule(deps) {
     if (typeof prefs.sessionY === "number") state.sessionY = prefs.sessionY;
     if (typeof prefs.sessionWidth === "number") state.sessionWidth = prefs.sessionWidth;
     if (typeof prefs.sessionHeight === "number") state.sessionHeight = prefs.sessionHeight;
-    state.fullSentenceMode = false;
+    if (typeof prefs.fullSentenceMode === "boolean") state.fullSentenceMode = prefs.fullSentenceMode;
     state.composerOpen = false;
     state.sessionMinimized = false;
     state.sessionPage = 0;
