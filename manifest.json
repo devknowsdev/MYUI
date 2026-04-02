@@ -35,6 +35,7 @@
         "terms_data.js",
         "defs_data.js",
         "persist.js",
+        "render.js",
         "styles.css"
       ],
       "matches": [

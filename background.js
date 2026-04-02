@@ -96,6 +96,9 @@ chrome.action.onClicked.addListener(async (tab) => {
         target: { tabId }, world: "MAIN", files: ["persist.js"]
       });
       await chrome.scripting.executeScript({
+        target: { tabId }, world: "MAIN", files: ["render.js"]
+      });
+      await chrome.scripting.executeScript({
         target: { tabId }, world: "MAIN", files: ["content.js"]
       });
       injectedTabs.add(tabId);
