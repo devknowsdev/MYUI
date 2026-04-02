@@ -2775,7 +2775,7 @@ function renderEditorView() {
       }
       if (id === "bp-write-mode" || id === "bp-write-mode-search") {
         state.writeMode = !state.writeMode;
-        if (state.writeMode) { state.fullSentenceMode = false; }
+        if (!state.writeMode) { state.fullSentenceMode = false; }
         savePrefs(); render(); return;
       }
       if (id === "bp-next-track") {
