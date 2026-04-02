@@ -3176,7 +3176,11 @@ ${body}
     if (!text) { state.tempTermsEditTarget = null; render(); return; }
     const shortcut = state.tempTermsEditShortcut.trim();
     const entry = shortcut ? { text, shortcut, source: "manual" } : text;
-    state.undefinedTerms = state.undefinedTerms.map((u, i) => i === idx ? entry : u);
+    const norm = normalize(text);
+    const isDupe = state.undefinedTerms.some((u, i) => i !== idx && normalize(undefinedTermText(u)) === norm);
+    if (!isDupe) {
+      state.undefinedTerms = state.undefinedTerms.map((u, i) => i === idx ? entry : u);
+    }
     state.tempTermsEditTarget = null;
     state.tempTermsEditText = "";
     state.tempTermsEditShortcut = "";
@@ -3210,7 +3214,12 @@ Do not add markdown or code fences.
 
 --- CSV ---
 ${csv}`;
-    navigator.clipboard?.writeText(prompt).then(() => {
+    if (!navigator.clipboard?.writeText) {
+      state.editorMessage = "Copy failed — check browser permissions";
+      render();
+      return;
+    }
+    navigator.clipboard.writeText(prompt).then(() => {
       state.editorMessage = `Exported ${state.undefinedTerms.length} terms — prompt copied to clipboard`;
       render();
     }).catch(() => {
