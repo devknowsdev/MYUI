@@ -208,6 +208,7 @@ globalThis.__myui_content_loaded = true;
     quickMoveMode: null,
     quickMovePillIdx: null,
     composerNextCapitalise: false,
+    composerPendingPillMeta: null,
     tempTermsOpen: false,
     tempTermsInput: "",
     tempTermsShortcutInput: "",
@@ -1579,7 +1580,9 @@ ${body}
     // All other modes: always add to session
     addTermToSession(term);
 
+    state.composerPendingPillMeta = { sec: term.sec || null, cat: term.cat || null };
     const published = routeInsert(activeInsertText(writeTarget, activeCategoryRoute(writeTarget) || ""), "term");
+    if (!published) state.composerPendingPillMeta = null;
     const route = activeCategoryRoute(term);
     if (route) {
       ensureToolTrayOpen(route);
@@ -2563,6 +2566,8 @@ ${body}
   }
 
   function insertAtComposerCursor(text, type = "term") {
+    const pillMeta = state.composerPendingPillMeta || {};
+    state.composerPendingPillMeta = null;
     if (state.quickComposePinned) {
       // Flush any uncommitted textarea words before adding the new pill
       flushComposerPendingText({ collectDerived: true });
@@ -2572,7 +2577,14 @@ ${body}
         insertText = insertText.charAt(0).toUpperCase() + insertText.slice(1);
         state.composerNextCapitalise = false;
       }
-      const newPill = { id: state.composerPillCounter, type, text: insertText };
+      const isTermPill = type === "term";
+      const newPill = {
+        id: state.composerPillCounter,
+        type,
+        text: insertText,
+        sec: isTermPill ? (pillMeta.sec || null) : null,
+        cat: isTermPill ? (pillMeta.cat || null) : null
+      };
       if (state.composerSelectedPillId !== null) {
         const idx = state.composerPills.findIndex(p => p.id === state.composerSelectedPillId);
         if (idx >= 0) {
@@ -3037,6 +3049,7 @@ ${body}
     state.composerSelectedPillId = null;
     state.composerDragId = null;
     state.composerNextCapitalise = false;
+    state.composerPendingPillMeta = null;
     state.composerFocused = false;
     if (closeComposerUi) state.composerOpen = false;
 
