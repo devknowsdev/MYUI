@@ -2755,10 +2755,10 @@
         .qs-compose-actions { display: flex; gap: 4px; flex-wrap: wrap; }
         .qs-print-btn { display: inline-flex; align-items: center; justify-content: center; align-self: center; box-sizing: border-box; border-radius: 6px; border: 1px solid rgba(109,140,255,0.22); background: rgba(109,140,255,0.08); color: inherit; padding: 2px 10px; font: inherit; font-size: var(--qs-compose-font-size); font-weight: 700; line-height: 1; cursor: pointer; height: 20px; min-height: 20px; }
         .qs-print-btn:disabled { opacity: 0.40; cursor: not-allowed; }
-        .qs-print-ready { background: rgba(34,197,94,0.12) !important; border-color: rgba(34,197,94,0.30) !important; color: #16a34a !important; }
-        .dark .qs-print-ready { color: #4ade80 !important; }
-        .qs-print-no-field { background: rgba(220,38,38,0.10) !important; border-color: rgba(220,38,38,0.25) !important; color: #dc2626 !important; }
-        .dark .qs-print-no-field { color: #f87171 !important; }
+        .qs-print-btn.qs-print-ready { background: rgba(34,197,94,0.12); border-color: rgba(34,197,94,0.30); color: #16a34a; }
+        .dark .qs-print-btn.qs-print-ready { color: #4ade80; }
+        .qs-print-btn.qs-print-no-field { background: rgba(220,38,38,0.10); border-color: rgba(220,38,38,0.25); color: #dc2626; }
+        .dark .qs-print-btn.qs-print-no-field { color: #f87171; }
         .qs-save-chip-btn { display: inline-flex; align-items: center; justify-content: center; align-self: center; box-sizing: border-box; border-radius: 6px; border: 1px solid rgba(109,140,255,0.22); background: rgba(109,140,255,0.08); color: inherit; padding: 2px 9px; font: inherit; font-size: var(--qs-compose-font-size); font-weight: 700; line-height: 1; cursor: pointer; height: 20px; min-height: 20px; }
         .qs-save-chip-btn:disabled { opacity: 0.40; cursor: not-allowed; }
         .qs-clear-btn { display: inline-flex; align-items: center; justify-content: center; align-self: center; box-sizing: border-box; border-radius: 6px; border: 1px solid rgba(120,120,120,0.18); background: none; color: inherit; padding: 2px 9px; font: inherit; font-size: var(--qs-compose-font-size); font-weight: 700; line-height: 1; cursor: pointer; opacity: 0.60; height: 20px; min-height: 20px; }
@@ -2768,7 +2768,7 @@
         .qs-chip-list { display: flex; flex-direction: column; gap: 3px; margin-top: 3px; }
         .qs-chip { display: flex; align-items: center; gap: 5px; border-radius: 6px; border: 1px solid rgba(109,140,255,0.18); background: rgba(109,140,255,0.06); color: inherit; padding: 3px 8px 3px 6px; font: inherit; font-size: var(--qs-compose-font-size); text-align: left; cursor: pointer; width: 100%; }
         .qs-chip:hover { background: rgba(109,140,255,0.14); }
-        .qs-chip-active { background: rgba(109,140,255,0.20) !important; border-color: rgba(109,140,255,0.40) !important; }
+        .qs-chip.qs-chip-active { background: rgba(109,140,255,0.20); border-color: rgba(109,140,255,0.40); }
         .qs-chip-num { font-size: 9px; font-weight: 800; opacity: 0.50; flex-shrink: 0; width: 14px; }
         .qs-chip-text { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
