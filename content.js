@@ -1582,6 +1582,7 @@ ${body}
 
     state.composerPendingPillMeta = { sec: term.sec || null, cat: term.cat || null };
     const published = routeInsert(activeInsertText(writeTarget, activeCategoryRoute(writeTarget) || ""), "term");
+    if (!published) state.composerPendingPillMeta = null;
     const route = activeCategoryRoute(term);
     if (route) {
       ensureToolTrayOpen(route);
@@ -2576,7 +2577,14 @@ ${body}
       }
       const pillMeta = state.composerPendingPillMeta || {};
       state.composerPendingPillMeta = null;
-      const newPill = { id: state.composerPillCounter, type, text: insertText, sec: pillMeta.sec || null, cat: pillMeta.cat || null };
+      const isTermPill = type === "term";
+      const newPill = {
+        id: state.composerPillCounter,
+        type,
+        text: insertText,
+        sec: isTermPill ? (pillMeta.sec || null) : null,
+        cat: isTermPill ? (pillMeta.cat || null) : null
+      };
       if (state.composerSelectedPillId !== null) {
         const idx = state.composerPills.findIndex(p => p.id === state.composerSelectedPillId);
         if (idx >= 0) {
