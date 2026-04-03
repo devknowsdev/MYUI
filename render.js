@@ -918,6 +918,9 @@ function renderDefinitionBar() {
           <button class="qs-fsm-btn${state.fullSentenceMode ? " fsm-active" : ""}" id="bp-full-sentence"
             type="button" aria-pressed="${state.fullSentenceMode ? "true" : "false"}"
             title="Sentence mode: term clicks append text directly to composer">Sentence</button>
+          <button class="qs-fsm-btn${state.composerSlotMode ? " fsm-active" : ""}" id="bp-slot-mode"
+            type="button" aria-pressed="${state.composerSlotMode ? "true" : "false"}"
+            title="Slot mode: term clicks replace the last pill from the same section">Slot</button>
           <button class="qs-print-btn ${currentWriteState() ? "qs-print-ready" : "qs-print-no-field"}" id="bp-composer-print"
             type="button" ${!hasText ? "disabled" : ""}>
             ${currentWriteState() ? "Print" : "Page off"}
@@ -2796,6 +2799,10 @@ function renderEditorView() {
       }
       if (id === "bp-full-sentence") {
         state.fullSentenceMode = !state.fullSentenceMode;
+        savePrefs(); render(); return;
+      }
+      if (id === "bp-slot-mode") {
+        state.composerSlotMode = !state.composerSlotMode;
         savePrefs(); render(); return;
       }
       if (id === "bp-composer-print") {
