@@ -2566,6 +2566,8 @@ ${body}
   }
 
   function insertAtComposerCursor(text, type = "term") {
+    const pillMeta = state.composerPendingPillMeta || {};
+    state.composerPendingPillMeta = null;
     if (state.quickComposePinned) {
       // Flush any uncommitted textarea words before adding the new pill
       flushComposerPendingText({ collectDerived: true });
@@ -2575,8 +2577,6 @@ ${body}
         insertText = insertText.charAt(0).toUpperCase() + insertText.slice(1);
         state.composerNextCapitalise = false;
       }
-      const pillMeta = state.composerPendingPillMeta || {};
-      state.composerPendingPillMeta = null;
       const isTermPill = type === "term";
       const newPill = {
         id: state.composerPillCounter,
