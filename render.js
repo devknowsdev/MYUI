@@ -901,6 +901,7 @@ function renderDefinitionBar() {
                 <div class="qs-preview-pill${isSelected ? " qs-preview-selected" : ""}${isDragging ? " qs-preview-dragging" : ""}${pill.type === "text" ? " qs-preview-text-pill" : ""}${pill.type === "connector" ? " qs-preview-conn-pill" : ""}${pill.type === "undefined" ? " qs-preview-undefined-pill" : ""}"
                   draggable="true" data-pill-id="${pill.id}" data-pill-select="${pill.id}">
                   <span class="qs-preview-pill-text">${esc(pill.text)}</span>
+                  ${pill.sec ? `<span class="qs-pill-sec">${esc(pill.sec)}</span>` : ""}
                   ${isSelected ? `
                     <button class="qs-pill-move-btn" type="button" data-pill-up="${pill.id}" title="Move left">←</button>
                     <button class="qs-pill-move-btn" type="button" data-pill-down="${pill.id}" title="Move right">→</button>` : ""}

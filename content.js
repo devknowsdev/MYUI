@@ -208,6 +208,7 @@ globalThis.__myui_content_loaded = true;
     quickMoveMode: null,
     quickMovePillIdx: null,
     composerNextCapitalise: false,
+    composerPendingPillMeta: null,
     tempTermsOpen: false,
     tempTermsInput: "",
     tempTermsShortcutInput: "",
@@ -1579,6 +1580,7 @@ ${body}
     // All other modes: always add to session
     addTermToSession(term);
 
+    state.composerPendingPillMeta = { sec: term.sec || null, cat: term.cat || null };
     const published = routeInsert(activeInsertText(writeTarget, activeCategoryRoute(writeTarget) || ""), "term");
     const route = activeCategoryRoute(term);
     if (route) {
@@ -2572,7 +2574,9 @@ ${body}
         insertText = insertText.charAt(0).toUpperCase() + insertText.slice(1);
         state.composerNextCapitalise = false;
       }
-      const newPill = { id: state.composerPillCounter, type, text: insertText };
+      const pillMeta = state.composerPendingPillMeta || {};
+      state.composerPendingPillMeta = null;
+      const newPill = { id: state.composerPillCounter, type, text: insertText, sec: pillMeta.sec || null, cat: pillMeta.cat || null };
       if (state.composerSelectedPillId !== null) {
         const idx = state.composerPills.findIndex(p => p.id === state.composerSelectedPillId);
         if (idx >= 0) {
@@ -3037,6 +3041,7 @@ ${body}
     state.composerSelectedPillId = null;
     state.composerDragId = null;
     state.composerNextCapitalise = false;
+    state.composerPendingPillMeta = null;
     state.composerFocused = false;
     if (closeComposerUi) state.composerOpen = false;
 

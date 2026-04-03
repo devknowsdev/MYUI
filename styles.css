@@ -2946,6 +2946,7 @@
         .qs-preview-conn-pill { color: #6d8cff; background: rgba(109,140,255,0.09); border-color: rgba(109,140,255,0.28); }
         .dark .qs-preview-conn-pill { color: #93a8ff; }
         .qs-preview-pill-text { pointer-events: none; }
+        .qs-pill-sec { font-size: 8px; font-weight: 800; opacity: 0.45; letter-spacing: 0.06em; text-transform: uppercase; pointer-events: none; }
         .qs-pill-move-btn { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; background: rgba(109,140,255,0.10); border: 1px solid rgba(109,140,255,0.18); border-radius: 4px; padding: 0; cursor: pointer;
           font-size: calc(8px * var(--ui-scale)); font-weight: 800; opacity: 0.9; line-height: 1; color: #4f67d8; }
         .qs-pill-move-btn:hover { opacity: 1; background: rgba(109,140,255,0.18); border-color: rgba(109,140,255,0.34); }
