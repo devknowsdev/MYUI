@@ -209,6 +209,7 @@ globalThis.__myui_content_loaded = true;
     quickMovePillIdx: null,
     composerNextCapitalise: false,
     composerPendingPillMeta: null,
+    composerSlotMode: false,
     tempTermsOpen: false,
     tempTermsInput: "",
     tempTermsShortcutInput: "",
@@ -2585,6 +2586,17 @@ ${body}
         sec: isTermPill ? (pillMeta.sec || null) : null,
         cat: isTermPill ? (pillMeta.cat || null) : null
       };
+      if (state.composerSlotMode && isTermPill && pillMeta.sec) {
+        const existingIdx = state.composerPills.findLastIndex(p => p.type === "term" && p.sec === pillMeta.sec);
+        if (existingIdx >= 0) {
+          const updatedPills = [...state.composerPills];
+          updatedPills[existingIdx] = newPill;
+          state.composerPills = updatedPills;
+          state.composerSelectedPillId = newPill.id;
+          syncComposerText({ focusSnapshot: { focused: true, startFromEnd: 0, endFromEnd: 0 } });
+          return;
+        }
+      }
       if (state.composerSelectedPillId !== null) {
         const idx = state.composerPills.findIndex(p => p.id === state.composerSelectedPillId);
         if (idx >= 0) {

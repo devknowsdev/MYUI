@@ -46,6 +46,7 @@ globalThis.__MYUI_createPersistModule = function createPersistModule(deps) {
       sessionWidth: state.sessionWidth,
       sessionHeight: state.sessionHeight,
       fullSentenceMode: state.fullSentenceMode,
+      composerSlotMode: state.composerSlotMode,
       connectivesEnabled: state.connectivesEnabled,
       connectivesCustom: state.connectivesCustom,
       listenConnectives: state.listenConnectives,
@@ -148,6 +149,7 @@ globalThis.__MYUI_createPersistModule = function createPersistModule(deps) {
     if (typeof prefs.sessionWidth === "number") state.sessionWidth = prefs.sessionWidth;
     if (typeof prefs.sessionHeight === "number") state.sessionHeight = prefs.sessionHeight;
     if (typeof prefs.fullSentenceMode === "boolean") state.fullSentenceMode = prefs.fullSentenceMode;
+    if (typeof prefs.composerSlotMode === "boolean") state.composerSlotMode = prefs.composerSlotMode;
     state.composerOpen = false;
     state.sessionMinimized = false;
     state.sessionPage = 0;
