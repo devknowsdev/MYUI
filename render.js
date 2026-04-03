@@ -914,6 +914,9 @@ function renderDefinitionBar() {
         <div class="qs-compose-actions">
           <span class="compose-status-pill ${state.writeMode ? "csp-green" : "csp-red"}" title="${state.writeMode ? "Clicked items publish into Quick-Tag Compose" : "Clicked-item publish is paused"}">${state.writeMode ? "● Compose on" : "● Compose off"}</span>
           <span class="compose-status-pill ${currentWriteState() ? "csp-green" : "csp-amber"}" title="${currentWriteState() ? "A page field is armed for Print" : "Click a real page field to arm Print"}">${currentWriteState() ? "● Field ready" : "◑ No field"}</span>
+          <button class="qs-fsm-btn${state.fullSentenceMode ? " fsm-active" : ""}" id="bp-full-sentence"
+            type="button" aria-pressed="${state.fullSentenceMode ? "true" : "false"}"
+            title="Sentence mode: term clicks append text directly to composer">Sentence</button>
           <button class="qs-print-btn ${currentWriteState() ? "qs-print-ready" : "qs-print-no-field"}" id="bp-composer-print"
             type="button" ${!hasText ? "disabled" : ""}>
             ${currentWriteState() ? "Print" : "Page off"}
@@ -2772,7 +2775,7 @@ function renderEditorView() {
       }
       if (id === "bp-write-mode" || id === "bp-write-mode-search") {
         state.writeMode = !state.writeMode;
-        if (state.writeMode) { state.fullSentenceMode = false; }
+        if (!state.writeMode) { state.fullSentenceMode = false; }
         savePrefs(); render(); return;
       }
       if (id === "bp-next-track") {
@@ -2791,10 +2794,7 @@ function renderEditorView() {
         savePrefs(); render(); return;
       }
       if (id === "bp-full-sentence") {
-        state.fullSentenceMode = false;
-        state.composerOpen = false;
-        state.composerFocused = false;
-        state.editorMessage = "Full sentence mode is not active in this compose-local branch";
+        state.fullSentenceMode = !state.fullSentenceMode;
         savePrefs(); render(); return;
       }
       if (id === "bp-composer-print") {

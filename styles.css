@@ -62,6 +62,12 @@
 
         .dark .csp-red { color: #f87171; }
 
+        /* ── Sentence mode toggle button ── */
+        .qs-fsm-btn { display: inline-flex; align-items: center; justify-content: center; align-self: center; box-sizing: border-box; border-radius: 6px; border: 1px solid rgba(120,120,120,0.18); background: none; color: inherit; padding: 2px 9px; font: inherit; font-size: var(--qs-compose-font-size); font-weight: 700; line-height: 1; cursor: pointer; opacity: 0.60; height: 20px; min-height: 20px; }
+        .qs-fsm-btn:hover { opacity: 1; }
+        .qs-fsm-btn.fsm-active { background: rgba(109,140,255,0.15); border-color: rgba(109,140,255,0.45); color: #6d8cff; opacity: 1; }
+        .dark .qs-fsm-btn.fsm-active { color: #a5b4fc; }
+
         .shell.dock-right {
           top: 50%;
           right: 0;
