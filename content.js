@@ -226,14 +226,10 @@ globalThis.__myui_content_loaded = true;
   let injected = false;
   let lastFocusedField = null;
   let armedFieldSelection = null;
-  let collapseTimer = null;
-  let isResizing = false;
-  let dockDragUntil = 0;
   let toolUndoStack = [];
   let toolRedoStack = [];
   let styleNode = null;
   let contentNode = null;
-  let renderScheduled = false;
   let _savePrefsTimer = null;
   let _initReady = false;
   let _pendingToggle = false;
@@ -2885,6 +2881,7 @@ ${body}
     contentNode = document.createElement("div");
     contentNode.style.display = "contents";
     shadow.appendChild(contentNode);
+    setDomRefs({ contentNode, shadow, host });
     bindDelegatedEvents();
 
     shadow.addEventListener("mousemove", (event) => {
@@ -3261,6 +3258,7 @@ ${csv}`;
   const {
     render,
     bindDelegatedEvents,
+    setDomRefs,
     updateHelpHighlight,
     syncHoverTooltip,
   } = createRenderModule({
@@ -3344,6 +3342,19 @@ ${csv}`;
     PANEL_MIN_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT,
     SESSION_MIN_WIDTH, SESSION_MAX_WIDTH, SESSION_MIN_HEIGHT, SESSION_MAX_HEIGHT,
     TOOL_TRAY_WIDTH, ALL_SECTIONS_KEY, TERM_DEF_LOOKUP,
+    // — section constants —
+    SECTION_ORDER, SECTION_CAT_HOTKEYS, SECTION_HUES,
+    // — runtime data getters —
+    getTermMap: () => TERM_MAP,
+    getMasterRows: () => MASTER_ROWS,
+    // — editor helpers —
+    normalizeMasterRow,
+    // — tool tray state helpers —
+    isToolTrayOpen, isToolTrayExpanded,
+    // — tool history —
+    pushToolHistory, redoToolHistory,
+    // — category palette —
+    paletteForCategory,
   });
 
   init();

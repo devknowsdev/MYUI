@@ -82,7 +82,34 @@ globalThis.__MYUI_createRenderModule = function createRenderModule(deps) {
       PANEL_MIN_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT,
       SESSION_MIN_WIDTH, SESSION_MAX_WIDTH, SESSION_MIN_HEIGHT, SESSION_MAX_HEIGHT,
       TOOL_TRAY_WIDTH, ALL_SECTIONS_KEY, TERM_DEF_LOOKUP,
+      // — section constants —
+      SECTION_ORDER, SECTION_CAT_HOTKEYS, SECTION_HUES,
+      // — runtime data getters (reassignable in content.js, must be fresh each call) —
+      getTermMap, getMasterRows,
+      // — editor helpers —
+      normalizeMasterRow,
+      // — tool tray state helpers —
+      isToolTrayOpen, isToolTrayExpanded,
+      // — tool history —
+      pushToolHistory, redoToolHistory,
+      // — category palette —
+      paletteForCategory,
     } = deps;
+
+    // ── DOM refs (set by content.js init() via setDomRefs before first bind/render) ──
+    let contentNode, shadow, host;
+    function setDomRefs(refs) {
+      contentNode = refs.contentNode;
+      shadow      = refs.shadow;
+      host        = refs.host;
+    }
+
+    // ── Render-owned mutable state (moved from content.js IIFE) ──────────────
+    let renderScheduled = false;
+    let collapseTimer   = null;
+    let isResizing      = false;
+    let dockDragUntil   = 0;
+    let _savePrefsTimer = null;
 
     const QUICK_ITEMS_PER_PAGE = 20;
 
@@ -1328,8 +1355,8 @@ function renderHelpPane() {
 
 function renderEditorView() {
     const activeCount = activeMasterRows().length;
-    const hiddenCount = MASTER_ROWS.filter((row) => row.hidden && !row.deleted).length;
-    const deletedCount = MASTER_ROWS.filter((row) => row.deleted).length;
+    const hiddenCount = getMasterRows().filter((row) => row.hidden && !row.deleted).length;
+    const deletedCount = getMasterRows().filter((row) => row.deleted).length;
 
     return `
       <div class="editor-shell">
@@ -1405,11 +1432,11 @@ function renderEditorView() {
     const isError = status.startsWith("error:");
     const statusText = status.replace(/^(ok|error):/, "");
     const parsed = state.inputTermsParsed || [];
-    const knownSections = new Set(MASTER_ROWS.map(r => r.section_key).filter(Boolean));
+    const knownSections = new Set(getMasterRows().map(r => r.section_key).filter(Boolean));
     const unknownSections = parsed.length ? [...new Set(parsed.filter(r => r.section_key && !knownSections.has(r.section_key)).map(r => r.section_key))] : [];
     const newCategories = parsed.length ? [...new Set(parsed.filter(r => r.category).map(r => r.section_key + "::" + r.category).filter(combo => {
       const [sk, cat] = combo.split("::");
-      return !MASTER_ROWS.some(row => row.section_key === sk && row.category === cat);
+      return !getMasterRows().some(row => row.section_key === sk && row.category === cat);
     }))] : [];
 
     return `
@@ -1472,7 +1499,7 @@ function renderEditorView() {
           ${sections.map((section) => `<button class="section-chip ${state.editorSection === section ? "active" : ""}" type="button" data-editor-section-chip="${esc(section)}">${esc(titleCase(section))}</button>`).join("")}
         </div>
         <div class="editor-category-chips">
-          ${categories.length ? categories.map((category) => `<button class="subcat-row ${state.editorCategory === category ? "active" : ""}" type="button" data-editor-category-chip="${esc(category)}"><span>${esc(category)}</span><span class="subcat-count">${MASTER_ROWS.filter((row) => row.section_key === state.editorSection && row.category === category && !row.deleted).length}</span></button>`).join("") : `<div class="editor-empty-state">Choose a section to see categories.</div>`}
+          ${categories.length ? categories.map((category) => `<button class="subcat-row ${state.editorCategory === category ? "active" : ""}" type="button" data-editor-category-chip="${esc(category)}"><span>${esc(category)}</span><span class="subcat-count">${getMasterRows().filter((row) => row.section_key === state.editorSection && row.category === category && !row.deleted).length}</span></button>`).join("") : `<div class="editor-empty-state">Choose a section to see categories.</div>`}
         </div>
         <div class="editor-entry-card ${state.editorSection && state.editorCategory ? "is-ready" : ""}">
           <div class="editor-entry-context">${state.editorSection && state.editorCategory ? `Adding to <strong>${esc(titleCase(state.editorSection))}</strong> · <strong>${esc(state.editorCategory)}</strong>` : `Choose a section and category before adding a shortcut.`}</div>
@@ -1961,7 +1988,7 @@ function renderEditorView() {
       if (variantPill) {
         event.stopPropagation();
         const key = variantPill.dataset.variantKey || "";
-        const term = TERM_MAP.get(key);
+        const term = getTermMap().get(key);
         if (!term) return;
         handleTermActivation(term, key, variantPill.dataset.hasDef === "1", event);
         return;
@@ -1970,7 +1997,7 @@ function renderEditorView() {
       const termCard = t.closest(".term-card");
       if (termCard) {
         const key = termCard.dataset.key || "";
-        const term = TERM_MAP.get(key);
+        const term = getTermMap().get(key);
         if (!term) return;
         handleTermActivation(term, key, termCard.dataset.hasDef === "1", event);
         return;
@@ -2141,7 +2168,7 @@ function renderEditorView() {
 
       const inlineToggleHidden = t.closest("[data-inline-toggle-hidden]");
       if (inlineToggleHidden) {
-        const row = MASTER_ROWS.find((r) => r.id === inlineToggleHidden.dataset.inlineToggleHidden);
+        const row = getMasterRows().find((r) => r.id === inlineToggleHidden.dataset.inlineToggleHidden);
         if (!row) return;
         row.hidden = !row.hidden;
         if (row.hidden) row.deleted = false;
@@ -2153,7 +2180,7 @@ function renderEditorView() {
 
       const inlineToggleDeleted = t.closest("[data-inline-toggle-deleted]");
       if (inlineToggleDeleted) {
-        const row = MASTER_ROWS.find((r) => r.id === inlineToggleDeleted.dataset.inlineToggleDeleted);
+        const row = getMasterRows().find((r) => r.id === inlineToggleDeleted.dataset.inlineToggleDeleted);
         if (!row) return;
         row.deleted = !row.deleted;
         if (row.deleted) row.hidden = false;
@@ -2180,7 +2207,7 @@ function renderEditorView() {
 
       const rowToggleHidden = t.closest("[data-row-toggle-hidden]");
       if (rowToggleHidden) {
-        const row = MASTER_ROWS.find((r) => r.id === rowToggleHidden.dataset.rowToggleHidden);
+        const row = getMasterRows().find((r) => r.id === rowToggleHidden.dataset.rowToggleHidden);
         if (!row) return;
         row.hidden = !row.hidden;
         if (row.hidden) row.deleted = false;
@@ -2191,7 +2218,7 @@ function renderEditorView() {
 
       const rowToggleDeleted = t.closest("[data-row-toggle-deleted]");
       if (rowToggleDeleted) {
-        const row = MASTER_ROWS.find((r) => r.id === rowToggleDeleted.dataset.rowToggleDeleted);
+        const row = getMasterRows().find((r) => r.id === rowToggleDeleted.dataset.rowToggleDeleted);
         if (!row) return;
         row.deleted = !row.deleted;
         if (row.deleted) row.hidden = false;
@@ -2644,7 +2671,7 @@ function renderEditorView() {
 
       const inlineField = t.closest("[data-inline-row][data-inline-field]");
       if (inlineField) {
-        const row = MASTER_ROWS.find((r) => r.id === inlineField.dataset.inlineRow);
+        const row = getMasterRows().find((r) => r.id === inlineField.dataset.inlineRow);
         if (!row) return;
         const field = inlineField.dataset.inlineField;
         row[field] = t.value;
@@ -2656,7 +2683,7 @@ function renderEditorView() {
 
       const editField = t.closest("[data-edit-row][data-edit-field]");
       if (editField) {
-        const row = MASTER_ROWS.find((r) => r.id === editField.dataset.editRow);
+        const row = getMasterRows().find((r) => r.id === editField.dataset.editRow);
         if (!row) return;
         const field = editField.dataset.editField;
         row[field] = t.value;
@@ -3216,8 +3243,8 @@ function renderEditorView() {
             id: `imported::${Date.now()}::${Math.random().toString(36).slice(2, 8)}`,
             hidden: false,
             deleted: false
-          }, MASTER_ROWS.length + 1);
-          MASTER_ROWS.push(row);
+          }, getMasterRows().length + 1);
+          getMasterRows().push(row);
           added++;
         }
         rebuildRuntimeData();
@@ -3274,12 +3301,12 @@ function renderEditorView() {
       }
       if (id === "bp-editor-add-context") { if (createEditorRowFromContext()) render(); return; }
       if (id === "bp-editor-add") {
-        const template = MASTER_ROWS.find((row) => (state.editorCategory && row.category === state.editorCategory) || (state.editorSection && row.section_key === state.editorSection)) || MASTER_ROWS[0] || normalizeMasterRow({}, MASTER_ROWS.length + 1);
-        MASTER_ROWS.unshift(normalizeMasterRow({
+        const template = getMasterRows().find((row) => (state.editorCategory && row.category === state.editorCategory) || (state.editorSection && row.section_key === state.editorSection)) || getMasterRows()[0] || normalizeMasterRow({}, getMasterRows().length + 1);
+        getMasterRows().unshift(normalizeMasterRow({
           ...template,
           id: `custom::${Date.now()}::${Math.random().toString(36).slice(2, 8)}`,
           shortcut: "", term: "", base_shortcut: "", suffix: "", notes: "", hidden: false, deleted: false
-        }, MASTER_ROWS.length + 1));
+        }, getMasterRows().length + 1));
         state.editorMessage = "Blank row added"; render(); return;
       }
       if (id === "bp-editor-save") { saveMasterRows("Saved changes"); return; }
@@ -3392,7 +3419,7 @@ function syncHoverTooltip() {
   let body = String(state.hoverTooltipBody || "").trim();
 
   if (!title && !body && state.previewKey) {
-    const term = TERM_MAP.get(state.previewKey);
+    const term = getTermMap().get(state.previewKey);
     const definition = term ? getHelpText(term) : "";
     if (definition) {
       title = `${term.p} · ${term.s}`;
@@ -3765,6 +3792,6 @@ function bindResize() {
     });
   }
 
-    return { render, bindDelegatedEvents, updateHelpHighlight, syncHoverTooltip };
+    return { render, bindDelegatedEvents, setDomRefs, updateHelpHighlight, syncHoverTooltip };
 };
 }
