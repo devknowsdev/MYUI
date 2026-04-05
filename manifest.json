@@ -36,7 +36,8 @@
         "defs_data.js",
         "persist.js",
         "render.js",
-        "styles.css"
+        "styles.css",
+        "compact_slim_pack_v3.json"
       ],
       "matches": [
         "<all_urls>"

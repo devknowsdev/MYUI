@@ -23,10 +23,56 @@ globalThis.__myui_content_loaded = true;
   const LEGACY_STORAGE_KEYS = [];
   const PAGE_STORAGE_KEY = "myuiPrefsPageV1";
   const MASTER_STORAGE_KEY = "myuiMasterV1";
+  const COMPACT_STORAGE_KEY = "myuiCompactQuickTagV1";
   const MYUI_BUILD = "2026-03-31-b14"; // persistent armed-field print target, live-safe focus lock
   globalThis.MYUI_BUILD = MYUI_BUILD;
   globalThis.__MYUI_BUILD__ = MYUI_BUILD;
   globalThis.__MYUI_PATCH_LABEL__ = "persistent-armed-field-print-target-live-safe";
+  const COMPACT_HISTORY_LIMIT = 40;
+  const COMPACT_PHRASE_LIMIT = 160;
+  const COMPACT_SOURCE_FILE = "compact_slim_pack_v3.json";
+  const COMPACT_GROUPS = [
+    {
+      key: "instruments",
+      label: "Instruments",
+      sectionKey: "instruments",
+      sectionLabel: "Instruments",
+      category: "Custom Instruments",
+      flowBucket: "Instruments",
+      functionBucket: "Instrumental",
+      palette: { h: 140, s: 22 }
+    },
+    {
+      key: "feel",
+      label: "Vibe / Feel / Energy",
+      sectionKey: "feel",
+      sectionLabel: "Feel",
+      category: "Custom Feel",
+      flowBucket: "Energy",
+      functionBucket: "Expressive",
+      palette: { h: 340, s: 24 }
+    },
+    {
+      key: "texture",
+      label: "Texture",
+      sectionKey: "sound",
+      sectionLabel: "Sound",
+      category: "Custom Texture",
+      flowBucket: "Texture",
+      functionBucket: "Textural",
+      palette: { h: 190, s: 24 }
+    },
+    {
+      key: "arrangement",
+      label: "Arrangement",
+      sectionKey: "form",
+      sectionLabel: "Form",
+      category: "Custom Arrangement",
+      flowBucket: "Form",
+      functionBucket: "Arrangement",
+      palette: { h: 40, s: 24 }
+    }
+  ];
   const SECTION_ORDER = ["connect", "feel", "sound", "form", "instruments", "mix"];
   const HOTKEY_WINDOW_SIZE = 10;
   const HOTKEY_PAGE_STEP = 4;
@@ -53,6 +99,10 @@ globalThis.__myui_content_loaded = true;
   };
   let DEFAULT_MASTER_ROWS = Array.isArray(globalThis.MYUI_TERM_MASTER) ? globalThis.MYUI_TERM_MASTER.map((row, index) => normalizeMasterRow(row, index)) : [];
   let MASTER_ROWS = DEFAULT_MASTER_ROWS.map((row) => ({ ...row }));
+  let CUSTOM_TERM_ENTRIES = [];
+  let COMPACT_SOURCE_ROWS = [];
+  let COMPACT_TERMS = [];
+  let COMPACT_TERM_MAP = new Map();
   let TERMS = [];
   let CATEGORY_CONFIG = [];
   let SECTION_META = [];
@@ -129,10 +179,24 @@ globalThis.__myui_content_loaded = true;
     sessionItems: [],
     sessionMinimized: false,
     sessionPage: 0,
+    quickTagMode: "compact",
     fullSentenceMode: false,
     composerText: "",
     composerOpen: false,
     composerFocused: false,
+    compactQuery: "",
+    compactComposeText: "",
+    compactCustomTermText: "",
+    compactCustomTermShortcut: "",
+    compactCustomTermGroup: "feel",
+    compactPrintHistory: [],
+    compactPhraseBank: [],
+    compactStatusMessage: "",
+    compactStatusKind: "info",
+    compactInterimTranscript: "",
+    compactDictationActive: false,
+    compactSpeechAvailable: false,
+    compactSourceReady: false,
     confirmExitOpen: false,
     confirmNextTrack: false,
     connectivesEnabled: true,
@@ -233,6 +297,7 @@ globalThis.__myui_content_loaded = true;
   let toolRedoStack = [];
   let styleNode = null;
   let contentNode = null;
+  let compactSpeechAdapter = null;
   let renderScheduled = false;
   let _savePrefsTimer = null;
   let _initReady = false;
@@ -510,8 +575,149 @@ globalThis.__myui_content_loaded = true;
     return normalized;
   }
 
+  function compactGroupConfig(groupKey) {
+    return COMPACT_GROUPS.find((group) => group.key === groupKey) || COMPACT_GROUPS[1];
+  }
+
+  function compactGroupOptions() {
+    return COMPACT_GROUPS.map((group) => ({ key: group.key, label: group.label }));
+  }
+
+  function compactCustomTermToRow(entry, index = 0) {
+    const group = compactGroupConfig(entry?.groupKey);
+    const createdAt = Number(entry?.createdAt) || Date.now();
+    return normalizeMasterRow({
+      id: String(entry?.id || `compact::${createdAt}::${index}`),
+      code: `CMP-${group.key.toUpperCase()}`,
+      category: group.category,
+      section_key: group.sectionKey,
+      section_label: group.sectionLabel,
+      flow_bucket: group.flowBucket,
+      function_bucket: group.functionBucket,
+      palette_h: String(group.palette.h),
+      palette_s: String(group.palette.s),
+      shortcut: String(entry?.shortcut || "").trim(),
+      term: String(entry?.term || "").trim(),
+      notes: String(entry?.notes || `Custom compact term · ${group.label}`),
+      order_code: String(9000 + index),
+      hidden: false,
+      deleted: false
+    }, index);
+  }
+
+  function compactGroupKeyFromValue(value) {
+    const text = normalize(value);
+    if (!text) return "";
+    if (/instrument|source|drum|guitar|bass|synth|vocal|keys|piano|string|horn|woodwind/.test(text)) return "instruments";
+    if (/vibe|feel|energy|emotion|dynamic|movement|mood|rhythm|groove|style|genre/.test(text)) return "feel";
+    if (/texture|tone|sound|production|mix|tonal|textural|timbre/.test(text)) return "texture";
+    if (/arrangement|arrange|form|structure|section|state|performance|delivery|harmony|melody/.test(text)) return "arrangement";
+    return "";
+  }
+
+  function flattenCompactSourcePayload(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (!payload || typeof payload !== "object") return [];
+    const directArrays = [payload.terms, payload.items, payload.rows, payload.data, payload.entries, payload.pack];
+    for (const entry of directArrays) {
+      if (Array.isArray(entry)) return entry;
+    }
+    const groupedArrays = [payload.groups, payload.sections, payload.categories];
+    for (const groupCollection of groupedArrays) {
+      if (Array.isArray(groupCollection)) {
+        return groupCollection.flatMap((group) => {
+          const groupKey = group?.key || group?.group || group?.name || group?.label || group?.section || group?.title || "";
+          const items = group?.terms || group?.items || group?.rows || group?.entries || [];
+          return Array.isArray(items) ? items.map((item) => ({ __groupKey: groupKey, ...item })) : [];
+        });
+      }
+      if (groupCollection && typeof groupCollection === "object") {
+        return Object.entries(groupCollection).flatMap(([groupKey, items]) =>
+          Array.isArray(items) ? items.map((item) => ({ __groupKey: groupKey, ...item })) : []
+        );
+      }
+    }
+    return [];
+  }
+
+  function compactSourceItemToRow(item, index = 0) {
+    if (!item || typeof item !== "object") return null;
+    const term = String(item.term || item.text || item.phrase || item.p || "").trim();
+    const shortcut = String(item.shortcut || item.key || item.s || "").trim();
+    if (!term || !shortcut) return null;
+    const inferredGroupKey = compactGroupKeyFromValue(
+      item.groupKey ||
+      item.group ||
+      item.section_key ||
+      item.section ||
+      item.sectionLabel ||
+      item.category_label ||
+      item.category ||
+      item.subcategory ||
+      item.bucket ||
+      item.__groupKey
+    );
+    const group = compactGroupConfig(inferredGroupKey || "feel");
+    const category = String(item.category_label || item.label || item.sectionLabel || item.category || item.bucket || group.label).trim() || group.label;
+    return normalizeMasterRow({
+      id: String(item.id || `slim::${group.key}::${normalize(term)}::${index}`),
+      code: String(item.code || item.category || `SLM-${group.key.toUpperCase()}`),
+      category,
+      section_key: group.sectionKey,
+      section_label: group.sectionLabel,
+      flow_bucket: String(item.flow_bucket || item.flowBucket || group.flowBucket),
+      function_bucket: String(item.function_bucket || item.functionBucket || group.functionBucket),
+      palette_h: String(item.palette_h ?? item.palette?.h ?? group.palette.h),
+      palette_s: String(item.palette_s ?? item.palette?.s ?? group.palette.s),
+      shortcut,
+      term,
+      base_shortcut: String(item.base_shortcut || item.baseShortcut || ""),
+      suffix: String(item.suffix || ""),
+      notes: String(item.notes || item.description || item.definition || item.desc || ""),
+      order_code: String(item.order_code ?? item.ord ?? index),
+      hidden: false,
+      deleted: false
+    }, index);
+  }
+
+  function compactBaseRows() {
+    return COMPACT_SOURCE_ROWS.length ? COMPACT_SOURCE_ROWS : MASTER_ROWS;
+  }
+
+  function compactRuntimeRows() {
+    return compactBaseRows()
+      .filter((row) => !row.deleted && !row.hidden)
+      .concat(CUSTOM_TERM_ENTRIES.map((entry, index) => compactCustomTermToRow(entry, index)));
+  }
+
+  function rebuildCompactRuntimeData() {
+    const rows = compactRuntimeRows().filter((row) => row.shortcut && row.term && row.category && row.section_key);
+    COMPACT_TERMS = rows.map((row, index) => ({
+      p: row.term,
+      s: row.shortcut,
+      sec: row.section_key,
+      secLabel: row.section_label || titleCase(row.section_key),
+      cat: row.category,
+      catCode: row.code || row.category,
+      catLabel: row.category,
+      flowBucket: row.flow_bucket || "",
+      functionBucket: row.function_bucket || "",
+      baseShortcut: row.base_shortcut || "",
+      suffix: row.suffix || "",
+      ord: Number(row.order_code || index),
+      rowId: row.id,
+      notes: row.notes || ""
+    }));
+    COMPACT_TERM_MAP = new Map(COMPACT_TERMS.map((term) => [termKey(term), term]));
+    state.compactSourceReady = !!COMPACT_SOURCE_ROWS.length;
+  }
+
+  function runtimeMasterRows() {
+    return MASTER_ROWS.concat(CUSTOM_TERM_ENTRIES.map((entry, index) => compactCustomTermToRow(entry, index)));
+  }
+
   function activeMasterRows() {
-    return MASTER_ROWS.filter((row) => !row.deleted && !row.hidden);
+    return runtimeMasterRows().filter((row) => !row.deleted && !row.hidden);
   }
 
   function rebuildRuntimeData() {
@@ -598,6 +804,7 @@ globalThis.__myui_content_loaded = true;
       state.selectedSection = "";
       state.expandedCats.clear();
     }
+    rebuildCompactRuntimeData();
   }
 
   function csvHeaders() {
@@ -1145,9 +1352,12 @@ ${body}
 
   function searchInputSnapshot() {
     const active = shadow?.activeElement;
-    const searchInput = shadow?.getElementById("bp-search");
+    const searchInput = active?.id === "bp-compact-search"
+      ? shadow?.getElementById("bp-compact-search")
+      : shadow?.getElementById("bp-search");
     if (!searchInput || active !== searchInput) return null;
     return {
+      id: searchInput.id,
       focused: true,
       start: Number.isFinite(searchInput.selectionStart) ? searchInput.selectionStart : null,
       end: Number.isFinite(searchInput.selectionEnd) ? searchInput.selectionEnd : null
@@ -1155,8 +1365,8 @@ ${body}
   }
 
   function restoreSearchInput(snapshot) {
-    if (!snapshot?.focused) return;
-    const searchInput = shadow?.getElementById("bp-search");
+    if (!snapshot?.focused || !snapshot?.id) return;
+    const searchInput = shadow?.getElementById(snapshot.id);
     if (!searchInput) return;
     searchInput.focus({ preventScroll: true });
     if (Number.isFinite(snapshot.start) && Number.isFinite(snapshot.end) && typeof searchInput.setSelectionRange === "function") {
@@ -1193,13 +1403,16 @@ ${body}
 
 
   function composerInputSnapshot() {
-    const el = shadow?.getElementById("bp-composer-text");
     const active = shadow?.activeElement;
+    const el = active?.id === "bp-compact-compose"
+      ? shadow?.getElementById("bp-compact-compose")
+      : shadow?.getElementById("bp-composer-text");
     if (!el || active !== el) return null;
     const value = String(el.value || "");
     const start = Number.isFinite(el.selectionStart) ? el.selectionStart : value.length;
     const end = Number.isFinite(el.selectionEnd) ? el.selectionEnd : start;
     return {
+      id: el.id,
       focused: true,
       startFromEnd: Math.max(0, value.length - start),
       endFromEnd: Math.max(0, value.length - end)
@@ -1207,8 +1420,8 @@ ${body}
   }
 
   function restoreComposerInput(snapshot, options = {}) {
-    if (!snapshot?.focused) return;
-    const el = shadow?.getElementById("bp-composer-text");
+    if (!snapshot?.focused || !snapshot?.id) return;
+    const el = shadow?.getElementById(snapshot.id);
     if (!el) return;
     const toEnd = options.toEnd !== false;
     const value = String(el.value || "");
@@ -1745,6 +1958,76 @@ ${body}
     return pool.filter(matchesQuery);
   }
 
+  function compactGroupMatches(groupKey, term) {
+    if (!term) return false;
+    if (groupKey === "instruments") return term.sec === "instruments";
+    if (groupKey === "feel") return term.sec === "feel";
+    if (groupKey === "texture") return term.sec === "sound";
+    if (groupKey === "arrangement") return term.sec === "form" || term.functionBucket === "Arrangement";
+    return false;
+  }
+
+  function compactTermSearchScore(term, query) {
+    if (!query) return 99;
+    const shortcut = normalize(term?.s);
+    const text = normalize(term?.p);
+    if (shortcut === query) return 0;
+    if (text === query) return 1;
+    if (shortcut.startsWith(query)) return 2;
+    if (text.startsWith(query)) return 3;
+    if (shortcut.includes(query)) return 4;
+    if (text.includes(query)) return 5;
+    return 99;
+  }
+
+  function compactVisibleGroups() {
+    const query = normalize(state.compactQuery);
+    const pool = COMPACT_TERMS.length ? COMPACT_TERMS : TERMS;
+    return COMPACT_GROUPS.map((group) => {
+      let terms = pool.filter((term) => compactGroupMatches(group.key, term));
+      if (query) {
+        terms = terms.filter((term) => {
+          const text = normalize(term?.p);
+          const shortcut = normalize(term?.s);
+          return text.includes(query) || shortcut.includes(query);
+        });
+      }
+      const seen = new Set();
+      terms = terms
+        .slice()
+        .sort((a, b) => {
+          const scoreDiff = compactTermSearchScore(a, query) - compactTermSearchScore(b, query);
+          if (scoreDiff) return scoreDiff;
+          const shortcutDiff = String(a?.s || "").localeCompare(String(b?.s || ""));
+          if (shortcutDiff) return shortcutDiff;
+          return String(a?.p || "").localeCompare(String(b?.p || ""));
+        })
+        .filter((term) => {
+          const key = termKey(term);
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+      const categoryMap = new Map();
+      terms.forEach((term) => {
+        const label = term?.cat || group.label;
+        if (!categoryMap.has(label)) categoryMap.set(label, []);
+        categoryMap.get(label).push(term);
+      });
+
+      return {
+        key: group.key,
+        label: group.label,
+        count: terms.length,
+        categories: Array.from(categoryMap.entries()).map(([label, groupTerms]) => ({
+          label,
+          terms: groupTerms
+        }))
+      };
+    });
+  }
+
   function categorySummaries(sectionKey) {
     return categoriesForSection(sectionKey)
       .map((category) => {
@@ -1911,6 +2194,10 @@ ${body}
       if (!state.writeMode) {
         state.editorMessage = "Live off — Quick-Tag Compose publish paused";
         return false;
+      }
+      if (isCompactQuickTagMode()) {
+        appendCompactComposeText(clean);
+        return true;
       }
       insertAtComposerCursor(clean + " ", type || "term");
       return true;
@@ -2419,11 +2706,12 @@ ${body}
     const trimmed = input.trim();
     if (!trimmed) return { pills: [], remainder: "" };
     const flushTail = !!options.flushTail;
+    const sourceTerms = Array.isArray(options.termList) && options.termList.length ? options.termList : TERMS;
     const trailingBoundary = /[\s,.!?;:]$/.test(input);
     const tokens = (trimmed.match(/[^\s,.!?;:]+|[,.!?;:]/g) || []).map((piece) => ({ raw: piece, norm: normalize(piece) }));
     const pills = [];
     let pendingWords = [];
-    const candidateTerms = TERMS.filter((term) => term?.sec !== "connect" && term?.p).map((term) => ({
+    const candidateTerms = sourceTerms.filter((term) => term?.sec !== "connect" && term?.p).map((term) => ({
       term,
       parts: String(term.p || "").trim().split(/\s+/).filter(Boolean).map((part) => normalize(part))
     })).filter((entry) => entry.parts.length);
@@ -2610,6 +2898,501 @@ ${body}
       ta.value = ta.value.slice(0, start) + text + ta.value.slice(end);
       ta.selectionStart = ta.selectionEnd = start + text.length;
       state.composerText = ta.value;
+    }
+  }
+
+  function isCompactQuickTagMode() {
+    return state.quickTagMode === "compact";
+  }
+
+  function setCompactStatus(message, kind = "info") {
+    state.compactStatusMessage = String(message || "").trim();
+    state.compactStatusKind = kind === "error" ? "error" : kind === "success" ? "success" : "info";
+  }
+
+  function clearCompactStatus() {
+    state.compactStatusMessage = "";
+    state.compactStatusKind = "info";
+  }
+
+  function sanitizeCompactCustomTerms(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+      .slice(0, 200)
+      .map((item, index) => ({
+        id: String(item?.id || `compact::${Date.now()}::${index}`).trim(),
+        term: String(item?.term || item?.text || "").trim(),
+        shortcut: String(item?.shortcut || "").trim(),
+        groupKey: compactGroupConfig(item?.groupKey).key,
+        createdAt: Number(item?.createdAt) || Date.now(),
+        notes: String(item?.notes || "").trim()
+      }))
+      .filter((item) => item.term && item.shortcut);
+  }
+
+  function sanitizeCompactUndefinedTerms(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+      .slice(0, 200)
+      .map((item) => {
+        if (typeof item === "string") {
+          const text = item.trim();
+          return text ? text : null;
+        }
+        const text = String(item?.text || "").trim();
+        if (!text) return null;
+        const shortcut = String(item?.shortcut || "").trim();
+        return shortcut ? { text, shortcut, source: String(item?.source || "compact") } : text;
+      })
+      .filter(Boolean);
+  }
+
+  function sanitizeCompactPrintHistory(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+      .slice(0, COMPACT_HISTORY_LIMIT)
+      .map((item, index) => {
+        if (typeof item === "string") {
+          const text = item.trim();
+          return text ? { id: `compact-print::${index}`, text, printedAt: Date.now() - index } : null;
+        }
+        const text = String(item?.text || "").trim();
+        if (!text) return null;
+        return {
+          id: String(item?.id || `compact-print::${index}`),
+          text,
+          printedAt: Number(item?.printedAt) || Date.now()
+        };
+      })
+      .filter(Boolean);
+  }
+
+  function sanitizeCompactPhraseBank(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+      .slice(0, COMPACT_PHRASE_LIMIT)
+      .map((item, index) => {
+        if (typeof item === "string") {
+          const text = item.trim();
+          return text ? { id: `compact-phrase::${index}`, text, sourcePrintId: "", capturedAt: Date.now() - index } : null;
+        }
+        const text = String(item?.text || "").trim();
+        if (!text) return null;
+        return {
+          id: String(item?.id || `compact-phrase::${index}`),
+          text,
+          sourcePrintId: String(item?.sourcePrintId || ""),
+          capturedAt: Number(item?.capturedAt) || Date.now()
+        };
+      })
+      .filter(Boolean);
+  }
+
+  async function loadCompactSourceRows() {
+    COMPACT_SOURCE_ROWS = [];
+    try {
+      const url = chrome?.runtime?.getURL?.(COMPACT_SOURCE_FILE);
+      if (!url) return;
+      const response = await fetch(url);
+      if (!response.ok) return;
+      const payload = await response.json();
+      COMPACT_SOURCE_ROWS = flattenCompactSourcePayload(payload)
+        .map((item, index) => compactSourceItemToRow(item, index))
+        .filter(Boolean);
+    } catch (_) {
+      COMPACT_SOURCE_ROWS = [];
+    }
+  }
+
+  async function loadCompactData() {
+    const area = chrome?.storage?.local;
+    if (!area) {
+      CUSTOM_TERM_ENTRIES = [];
+      state.compactPrintHistory = [];
+      state.compactPhraseBank = [];
+      return;
+    }
+    try {
+      const stored = await new Promise((resolve) => {
+        try {
+          const maybe = area.get(COMPACT_STORAGE_KEY, (value) => resolve(value));
+          if (maybe?.then) maybe.then(resolve).catch(() => resolve({}));
+        } catch (_) {
+          resolve({});
+        }
+      });
+      const payload = stored?.[COMPACT_STORAGE_KEY] || {};
+      CUSTOM_TERM_ENTRIES = sanitizeCompactCustomTerms(payload.customTerms);
+      state.compactPrintHistory = sanitizeCompactPrintHistory(payload.fullPrintHistory || payload.printHistory);
+      state.compactPhraseBank = sanitizeCompactPhraseBank(payload.phraseBank);
+      const storedUndefined = sanitizeCompactUndefinedTerms(payload.undefinedTerms);
+      if (storedUndefined.length) state.undefinedTerms = storedUndefined;
+    } catch (_) {
+      CUSTOM_TERM_ENTRIES = [];
+      state.compactPrintHistory = [];
+      state.compactPhraseBank = [];
+    }
+  }
+
+  function saveCompactData() {
+    const area = chrome?.storage?.local;
+    if (!area) return;
+    const payload = {
+      [COMPACT_STORAGE_KEY]: {
+        customTerms: CUSTOM_TERM_ENTRIES,
+        fullPrintHistory: sanitizeCompactPrintHistory(state.compactPrintHistory),
+        phraseBank: sanitizeCompactPhraseBank(state.compactPhraseBank),
+        undefinedTerms: sanitizeCompactUndefinedTerms(state.undefinedTerms)
+      }
+    };
+    try {
+      const maybe = area.set(payload, () => {});
+      if (maybe?.catch) maybe.catch(() => {});
+    } catch (_) {}
+  }
+
+  function appendCompactComposeText(text) {
+    const clean = String(text || "").trim();
+    if (!clean) return false;
+    const current = String(state.compactComposeText || "");
+    const needsLeadingSpace = !!current && !/[\s([{/.,;:!?-]$/.test(current);
+    state.compactComposeText = `${current}${needsLeadingSpace ? " " : ""}${clean}`.trim();
+    state.compactInterimTranscript = "";
+    return true;
+  }
+
+  function setCompactComposeText(text) {
+    state.compactComposeText = String(text || "").trim();
+    state.compactInterimTranscript = "";
+  }
+
+  function collectCompactUndefinedTerms(text = state.compactComposeText) {
+    const parsed = parseComposerPendingText(String(text || ""), {
+      flushTail: true,
+      termList: COMPACT_TERMS.length ? COMPACT_TERMS : TERMS
+    });
+    if (!parsed?.pills?.length) return false;
+    const knownConnectives = new Set([...getConnectives(), ...state.listenConnectives].map(normalize));
+    let didChange = false;
+    parsed.pills.forEach((pill) => {
+      if (!pill || pill.type !== "undefined") return;
+      const raw = String(pill.text || "").trim();
+      const norm = normalize(raw);
+      if (!norm || knownConnectives.has(norm)) return;
+      if (!state.undefinedTerms.some((entry) => normalize(undefinedTermText(entry)) === norm)) {
+        state.undefinedTerms = [raw, ...state.undefinedTerms].slice(0, 200);
+        didChange = true;
+      }
+    });
+    if (didChange) {
+      savePrefs();
+      saveCompactData();
+    }
+    return didChange;
+  }
+
+  function compactShortcutCollision(shortcut) {
+    const target = normalize(shortcut);
+    if (!target) return null;
+    const compactRows = compactRuntimeRows();
+    return compactRows.find((row) => normalize(row.shortcut) === target)
+      || activeMasterRows().find((row) => normalize(row.shortcut) === target)
+      || null;
+  }
+
+  function saveCompactCustomTerm() {
+    const term = String(state.compactCustomTermText || "").trim();
+    const shortcut = String(state.compactCustomTermShortcut || "").trim();
+    const group = compactGroupConfig(state.compactCustomTermGroup);
+    if (!term || !shortcut) {
+      setCompactStatus("Enter both a custom term and a shortcut before saving.", "error");
+      render();
+      return false;
+    }
+    const shortcutCollision = compactShortcutCollision(shortcut);
+    if (shortcutCollision) {
+      setCompactStatus(`Shortcut "${shortcut}" already belongs to "${shortcutCollision.term}".`, "error");
+      render();
+      return false;
+    }
+    const duplicateTerm = compactRuntimeRows().find((row) => normalize(row.term) === normalize(term))
+      || activeMasterRows().find((row) => normalize(row.term) === normalize(term));
+    if (duplicateTerm) {
+      setCompactStatus(`"${term}" already exists in the runtime term set.`, "error");
+      render();
+      return false;
+    }
+    CUSTOM_TERM_ENTRIES = [
+      {
+        id: `compact::${Date.now()}::${Math.random().toString(36).slice(2, 8)}`,
+        term,
+        shortcut,
+        groupKey: group.key,
+        createdAt: Date.now(),
+        notes: `Custom compact term · ${group.label}`
+      },
+      ...CUSTOM_TERM_ENTRIES
+    ];
+    const norm = normalize(term);
+    state.undefinedTerms = (state.undefinedTerms || []).filter((entry) => normalize(undefinedTermText(entry)) !== norm);
+    state.compactCustomTermText = "";
+    state.compactCustomTermShortcut = "";
+    state.compactCustomTermGroup = group.key;
+    rebuildRuntimeData();
+    saveCompactData();
+    savePrefs();
+    setCompactStatus(`Saved "${term}" to ${group.label}.`, "success");
+    render();
+    return true;
+  }
+
+  function queueCompactCustomTerm(source, groupKey = state.compactCustomTermGroup) {
+    const nextText = typeof source === "object" ? undefinedTermText(source).trim() : String(source || "").trim();
+    const nextShortcut = typeof source === "object" ? undefinedTermShortcut(source).trim() : "";
+    if (!nextText) return false;
+    state.compactCustomTermText = nextText;
+    state.compactCustomTermGroup = compactGroupConfig(groupKey).key;
+    if (nextShortcut) state.compactCustomTermShortcut = nextShortcut;
+    setCompactStatus(`Custom term form loaded for "${nextText}".`, "info");
+    render();
+    return true;
+  }
+
+  function compactPhraseKey(text) {
+    return normalize(text).replace(/\s+/g, " ").replace(/[.!?]+$/g, "").trim();
+  }
+
+  function extractCompactPhrasesFromPrint(text, sourcePrintId = "") {
+    const raw = String(text || "");
+    if (!raw.trim()) return [];
+    const seen = new Set();
+    return raw
+      .split(/\r?\n+/)
+      .flatMap((line) => line.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [])
+      .map((fragment) => fragment.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .filter((fragment) => {
+        const key = compactPhraseKey(fragment);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((fragment, index) => ({
+        id: `compact-phrase::${Date.now()}::${index}::${Math.random().toString(36).slice(2, 6)}`,
+        text: fragment,
+        sourcePrintId,
+        capturedAt: Date.now()
+      }));
+  }
+
+  function recordCompactPrint(text) {
+    const clean = String(text || "").trim();
+    if (!clean) return;
+    const entry = {
+      id: `compact-print::${Date.now()}::${Math.random().toString(36).slice(2, 8)}`,
+      text: clean,
+      printedAt: Date.now()
+    };
+    state.compactPrintHistory = [
+      entry,
+      ...(state.compactPrintHistory || []).filter((item) => normalize(item?.text) !== normalize(clean))
+    ].slice(0, COMPACT_HISTORY_LIMIT);
+    const phraseEntries = extractCompactPhrasesFromPrint(clean, entry.id);
+    const phraseKeys = new Set(phraseEntries.map((item) => compactPhraseKey(item.text)));
+    state.compactPhraseBank = [
+      ...phraseEntries,
+      ...(state.compactPhraseBank || []).filter((item) => !phraseKeys.has(compactPhraseKey(item?.text)))
+    ].slice(0, COMPACT_PHRASE_LIMIT);
+    saveCompactData();
+  }
+
+  function useCompactHistoryEntry(entryId) {
+    const entry = (state.compactPrintHistory || []).find((item) => item.id === entryId);
+    if (!entry) return false;
+    setCompactComposeText(entry.text);
+    setCompactStatus(`Loaded "${entry.text}" into Compose.`, "info");
+    render();
+    return true;
+  }
+
+  function useCompactPhraseEntry(entryId) {
+    const entry = (state.compactPhraseBank || []).find((item) => item.id === entryId);
+    if (!entry) return false;
+    setCompactComposeText(entry.text);
+    setCompactStatus(`Loaded phrase "${entry.text}" into Compose.`, "info");
+    render();
+    return true;
+  }
+
+  function appendCompactTermByKey(key) {
+    const term = COMPACT_TERM_MAP.get(key) || TERM_MAP.get(key);
+    if (!term) return false;
+    const text = activeInsertText(term, activeCategoryRoute(term) || "") || term.p;
+    if (!appendCompactComposeText(text)) return false;
+    clearCompactStatus();
+    render();
+    return true;
+  }
+
+  function performCompactPrint() {
+    const text = String(state.compactComposeText || "").trim();
+    collectCompactUndefinedTerms(text);
+    if (!text) {
+      setCompactStatus("Compose is empty.", "error");
+      render();
+      return false;
+    }
+    if (!currentWriteField()) {
+      setCompactStatus("Click the target page field first, then print.", "error");
+      render();
+      return false;
+    }
+    const printed = insertIntoField(smartInsertTermText(text), false);
+    if (!printed) {
+      setCompactStatus("Print failed for the currently armed field.", "error");
+      render();
+      return false;
+    }
+    recordCompactPrint(text);
+    state.compactInterimTranscript = "";
+    setCompactStatus("Printed to the armed field and saved to history.", "success");
+    render();
+    return true;
+  }
+
+  function compactSpeechErrorMessage(code) {
+    if (code === "not-allowed" || code === "service-not-allowed") return "Microphone access was blocked.";
+    if (code === "no-speech") return "No speech was detected.";
+    if (code === "audio-capture") return "No microphone input is available.";
+    if (code === "network") return "Speech recognition hit a network error.";
+    return "Browser speech recognition failed.";
+  }
+
+  function createBrowserSpeechAdapter() {
+    const SpeechCtor = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+    let resultHandler = () => {};
+    let errorHandler = () => {};
+    let stateHandler = () => {};
+
+    const buildRecognition = () => {
+      if (!SpeechCtor) return null;
+      const next = new SpeechCtor();
+      next.continuous = true;
+      next.interimResults = true;
+      next.lang = navigator.language || "en-US";
+      next.onstart = () => stateHandler({ listening: true });
+      next.onend = () => stateHandler({ listening: false });
+      next.onerror = (event) => {
+        errorHandler({
+          code: String(event?.error || "speech-error"),
+          message: compactSpeechErrorMessage(event?.error)
+        });
+      };
+      next.onresult = (event) => {
+        let finalText = "";
+        let interimText = "";
+        for (let index = event.resultIndex; index < event.results.length; index += 1) {
+          const transcript = String(event.results[index]?.[0]?.transcript || "").trim();
+          if (!transcript) continue;
+          if (event.results[index].isFinal) finalText += `${finalText ? " " : ""}${transcript}`;
+          else interimText += `${interimText ? " " : ""}${transcript}`;
+        }
+        resultHandler({ finalText, interimText });
+      };
+      return next;
+    };
+
+    return {
+      start() {
+        if (!SpeechCtor) throw new Error("Speech recognition unavailable");
+        if (recognition) {
+          try { recognition.abort(); } catch (_) {}
+          recognition = null;
+        }
+        recognition = buildRecognition();
+        recognition.start();
+      },
+      stop() {
+        if (!recognition) return;
+        try { recognition.stop(); } catch (_) {}
+      },
+      isAvailable() {
+        return !!SpeechCtor;
+      },
+      onResult(callback) {
+        resultHandler = typeof callback === "function" ? callback : () => {};
+      },
+      onError(callback) {
+        errorHandler = typeof callback === "function" ? callback : () => {};
+      },
+      onStateChange(callback) {
+        stateHandler = typeof callback === "function" ? callback : () => {};
+      }
+    };
+  }
+
+  function ensureCompactSpeechAdapter() {
+    if (compactSpeechAdapter) return compactSpeechAdapter;
+    compactSpeechAdapter = createBrowserSpeechAdapter();
+    compactSpeechAdapter.onResult(({ finalText, interimText }) => {
+      state.compactSpeechAvailable = compactSpeechAdapter.isAvailable();
+      state.compactInterimTranscript = String(interimText || "").trim();
+      if (finalText) {
+        appendCompactComposeText(finalText);
+        setCompactStatus("Transcript appended to Compose.", "success");
+      }
+      render();
+    });
+    compactSpeechAdapter.onError(({ message }) => {
+      state.compactDictationActive = false;
+      state.compactInterimTranscript = "";
+      state.compactSpeechAvailable = compactSpeechAdapter.isAvailable();
+      setCompactStatus(message || "Browser speech recognition failed.", "error");
+      render();
+    });
+    compactSpeechAdapter.onStateChange(({ listening }) => {
+      state.compactDictationActive = !!listening;
+      if (!listening) state.compactInterimTranscript = "";
+      render();
+    });
+    state.compactSpeechAvailable = compactSpeechAdapter.isAvailable();
+    return compactSpeechAdapter;
+  }
+
+  function compactSpeechAvailable() {
+    return ensureCompactSpeechAdapter().isAvailable();
+  }
+
+  function toggleCompactDictation() {
+    const adapter = ensureCompactSpeechAdapter();
+    state.compactSpeechAvailable = adapter.isAvailable();
+    if (!adapter.isAvailable()) {
+      state.compactDictationActive = false;
+      state.compactInterimTranscript = "";
+      setCompactStatus("Browser speech recognition is unavailable here. The rest of the compact tagger still works normally.", "error");
+      render();
+      return false;
+    }
+    if (state.compactDictationActive) {
+      adapter.stop();
+      setCompactStatus("Dictation stopped.", "info");
+      render();
+      return false;
+    }
+    try {
+      state.compactInterimTranscript = "";
+      adapter.start();
+      state.compactDictationActive = true;
+      setCompactStatus("Listening…", "info");
+      render();
+      return true;
+    } catch (error) {
+      state.compactDictationActive = false;
+      state.compactInterimTranscript = "";
+      setCompactStatus(error?.message || "Browser speech recognition could not start.", "error");
+      render();
+      return false;
     }
   }
 
@@ -2894,7 +3677,7 @@ ${body}
     });
 
     document.addEventListener("pointerdown", (event) => {
-      if (!state.appActive || !state.sessionOpen || !state.writeMode) return;
+      if (!state.appActive || !state.sessionOpen || (!state.writeMode && !isCompactQuickTagMode())) return;
       const target = event.composedPath?.()?.[0] || event.target;
       if (host?.contains(target)) return;
       const field = resolveEditableField(target);
@@ -2951,10 +3734,11 @@ ${body}
       render();
     });
 
-    Promise.all([loadPrefs(), loadMasterRows(), loadStyles()]).finally(() => {
+    Promise.all([loadPrefs(), loadMasterRows(), loadCompactSourceRows(), loadCompactData(), loadStyles()]).finally(() => {
       rebuildRuntimeData();
       state.queryInput = typeof state.queryInput === "string" ? state.queryInput : state.query;
       state.query = typeof state.query === "string" ? state.query : String(state.queryInput || "").trim();
+      state.compactSpeechAvailable = compactSpeechAvailable();
       _initReady = true;
       console.log(`[MYUI] build ${MYUI_BUILD}`);
       if (_pendingToggle) {
@@ -3051,6 +3835,11 @@ ${body}
     state.composerNextCapitalise = false;
     state.composerPendingPillMeta = null;
     state.composerFocused = false;
+    state.compactComposeText = "";
+    state.compactInterimTranscript = "";
+    state.compactDictationActive = false;
+    clearCompactStatus();
+    if (compactSpeechAdapter) compactSpeechAdapter.stop();
     if (closeComposerUi) state.composerOpen = false;
 
     state.composerChips = [];
@@ -3089,7 +3878,7 @@ ${body}
 
     try { window.localStorage?.removeItem(PAGE_STORAGE_KEY); } catch (_) {}
 
-    const keysToRemove = [STORAGE_KEY, MASTER_STORAGE_KEY, ...LEGACY_STORAGE_KEYS];
+    const keysToRemove = [STORAGE_KEY, MASTER_STORAGE_KEY, COMPACT_STORAGE_KEY, ...LEGACY_STORAGE_KEYS];
     try {
       const area = chrome?.storage?.local;
       if (area) {
@@ -3110,6 +3899,12 @@ ${body}
     state.quickConnectOrderMode = "user";
     state.quickPhrasesOrderMode = "user";
     state.undefinedTerms = [];
+    CUSTOM_TERM_ENTRIES = [];
+    state.compactPrintHistory = [];
+    state.compactPhraseBank = [];
+    COMPACT_SOURCE_ROWS = [];
+    COMPACT_TERMS = [];
+    COMPACT_TERM_MAP = new Map();
     console.log(`[MYUI] devReset — hard reset complete (build ${MYUI_BUILD})`);
     window.location.reload();
   }
@@ -3181,7 +3976,9 @@ ${body}
     state.tempTermsAwaitingShortcut = false;
     state.tempTermsPendingText = "";
     state.tempTermsShortcutInput = "";
-    savePrefs(); render();
+    savePrefs();
+    saveCompactData();
+    render();
   }
 
   function confirmTempTermEdit(idx) {
@@ -3197,7 +3994,9 @@ ${body}
     state.tempTermsEditTarget = null;
     state.tempTermsEditText = "";
     state.tempTermsEditShortcut = "";
-    savePrefs(); render();
+    savePrefs();
+    saveCompactData();
+    render();
   }
 
   function exportTempTermsToAI() {
@@ -3297,6 +4096,11 @@ ${csv}`;
     syncComposerText, flushComposerPendingText, reconcileComposerTypedInput,
     joinComposerPills, getComposerResolvedText, getComposerPendingTextFromValue,
     composerPillsFromPendingText,
+    // — compact quick-tag —
+    isCompactQuickTagMode, compactVisibleGroups, compactGroupOptions,
+    queueCompactCustomTerm, appendCompactTermByKey, performCompactPrint,
+    useCompactHistoryEntry, useCompactPhraseEntry, saveCompactCustomTerm, toggleCompactDictation,
+    collectCompactUndefinedTerms,
     // — input snapshots —
     searchInputSnapshot, restoreSearchInput,
     qsInputSnapshot, restoreQsInput,
@@ -3315,7 +4119,7 @@ ${csv}`;
     setToolTrayOpen, setToolTrayExpanded, toggleToolTray, ensureToolTrayOpen,
     undoToolHistory,
     // — persist —
-    savePrefs, saveMasterRows, restoreDefaultMasterRows,
+    savePrefs, saveCompactData, saveMasterRows, restoreDefaultMasterRows,
     validateAndSetInputTerms, parseInputTerms,
     exportMasterCsv, exportPlist, downloadText,
     // — editor ops —

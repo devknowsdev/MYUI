@@ -35,6 +35,11 @@ globalThis.__MYUI_createRenderModule = function createRenderModule(deps) {
       syncComposerText, flushComposerPendingText, reconcileComposerTypedInput,
       joinComposerPills, getComposerResolvedText, getComposerPendingTextFromValue,
       composerPillsFromPendingText,
+      // — compact quick-tag —
+      isCompactQuickTagMode, compactVisibleGroups, compactGroupOptions,
+      queueCompactCustomTerm, appendCompactTermByKey, performCompactPrint,
+      useCompactHistoryEntry, useCompactPhraseEntry, saveCompactCustomTerm, toggleCompactDictation,
+      collectCompactUndefinedTerms,
       // — input snapshots —
       searchInputSnapshot, restoreSearchInput,
       qsInputSnapshot, restoreQsInput,
@@ -53,7 +58,7 @@ globalThis.__MYUI_createRenderModule = function createRenderModule(deps) {
       setToolTrayOpen, setToolTrayExpanded, toggleToolTray, ensureToolTrayOpen,
       undoToolHistory,
       // — persist —
-      savePrefs, saveMasterRows, restoreDefaultMasterRows,
+      savePrefs, saveCompactData, saveMasterRows, restoreDefaultMasterRows,
       validateAndSetInputTerms, parseInputTerms,
       exportMasterCsv, exportPlist, downloadText,
       // — editor ops —
@@ -85,6 +90,18 @@ globalThis.__MYUI_createRenderModule = function createRenderModule(deps) {
     } = deps;
 
     const QUICK_ITEMS_PER_PAGE = 20;
+    let renderScheduled = false;
+    let host = null;
+    let shadow = null;
+    let contentNode = null;
+
+    function syncDomRefs() {
+      host = document.getElementById("myui-host");
+      shadow = host?.shadowRoot || null;
+      contentNode = shadow
+        ? Array.from(shadow.children).find((node) => node.tagName === "DIV") || null
+        : null;
+    }
 
   function renderFieldTargetIndicator() {
     const field = currentWriteField();
@@ -99,6 +116,8 @@ globalThis.__MYUI_createRenderModule = function createRenderModule(deps) {
   }
 
   function render() {
+    syncDomRefs();
+    if (!contentNode) return;
     if (renderScheduled) return;
     renderScheduled = true;
     requestAnimationFrame(() => {
@@ -770,6 +789,8 @@ function renderDefinitionBar() {
           <span class="myui-build-tag" title="Build">${MYUI_BUILD}</span>
         </span>
         <div class="session-window-actions">
+          <button class="session-ctrl-btn" id="bp-qt-mode-toggle" type="button"
+            title="Switch to the compact QuickTag window">Compact</button>
           <button class="session-ctrl-btn session-hk-btn${hkArmed ? " session-hk-btn--armed" : ""}"
             id="bp-qs-arm-hotkeys" type="button"
             title="${hkArmed ? "Hotkeys armed — click to disarm" : "Arm hotkeys (bypass field focus)"}">
@@ -1107,6 +1128,198 @@ function renderDefinitionBar() {
     `;
   }
 
+function renderCompactQuickHeader(minLabel, undefCount) {
+  return `
+    <div class="session-window-header compact-session-header" id="bp-session-drag">
+      <span class="session-window-title">
+        compact quick
+        <span class="myui-build-tag" title="Build">${MYUI_BUILD}</span>
+      </span>
+      <div class="session-window-actions">
+        ${undefCount ? `<span class="compact-header-count">${undefCount} new</span>` : ""}
+        <button class="session-ctrl-btn" id="bp-qt-mode-toggle" type="button" title="Switch back to the legacy QuickTag window">Legacy</button>
+        <button class="session-ctrl-btn" id="bp-session-minimize" type="button">${minLabel}</button>
+        <button class="session-ctrl-btn session-close-btn" id="bp-session-close" type="button">×</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderCompactStatusBar() {
+  const fallback = !state.compactSpeechAvailable
+    ? "Browser speech recognition is unavailable here. Typing and printing still work normally."
+    : "";
+  const message = state.compactStatusMessage || fallback;
+  if (!message) return "";
+  const kind = state.compactStatusMessage ? state.compactStatusKind : "info";
+  return `<div class="compact-status compact-status-${esc(kind)}">${esc(message)}</div>`;
+}
+
+function renderCompactHistorySection() {
+  const history = state.compactPrintHistory || [];
+  return `
+    <section class="compact-panel-block">
+      <div class="compact-block-head">
+        <span>Full Prints / History</span>
+        <span>${history.length}</span>
+      </div>
+      ${history.length ? `
+        <div class="compact-history-list">
+          ${history.map((entry) => `
+            <button class="compact-history-item" type="button" data-compact-history-use="${esc(entry.id)}">
+              <span class="compact-history-text">${esc(entry.text)}</span>
+            </button>
+          `).join("")}
+        </div>
+      ` : `<div class="compact-empty">Successful prints will appear here.</div>`}
+    </section>
+  `;
+}
+
+function renderCompactPhrasesSection() {
+  const phrases = state.compactPhraseBank || [];
+  return `
+    <section class="compact-panel-block">
+      <div class="compact-block-head">
+        <span>Phrases</span>
+        <span>${phrases.length}</span>
+      </div>
+      ${phrases.length ? `
+        <div class="compact-history-list">
+          ${phrases.map((entry) => `
+            <button class="compact-history-item compact-phrase-item" type="button" data-compact-phrase-use="${esc(entry.id)}">
+              <span class="compact-history-text">${esc(entry.text)}</span>
+            </button>
+          `).join("")}
+        </div>
+      ` : `<div class="compact-empty">Printed sentences and line fragments will land here for fast reuse.</div>`}
+    </section>
+  `;
+}
+
+function renderCompactUndefinedSection() {
+  const terms = state.undefinedTerms || [];
+  return `
+    <section class="compact-panel-block">
+      <div class="compact-block-head">
+        <span>Undefined</span>
+        <span>${terms.length}</span>
+      </div>
+      ${terms.length ? `
+        <div class="compact-undefined-list">
+          ${terms.map((entry, index) => `
+            <button class="compact-undefined-item" type="button" data-compact-undefined-use="${index}">
+              <span class="compact-undefined-text">${esc(undefinedTermText(entry))}</span>
+              ${undefinedTermShortcut(entry) ? `<code class="compact-undefined-shortcut">${esc(undefinedTermShortcut(entry))}</code>` : ""}
+            </button>
+          `).join("")}
+        </div>
+      ` : `<div class="compact-empty">Typed unknown words from Compose are collected here.</div>`}
+    </section>
+  `;
+}
+
+function renderCompactGroupSection(group) {
+  return `
+    <section class="compact-panel-block compact-group-block">
+      <div class="compact-block-head">
+        <span>${esc(group.label)}</span>
+        <span>${group.count}</span>
+      </div>
+      ${group.count ? group.categories.map((category) => `
+        <div class="compact-category-block">
+          <div class="compact-category-label">${esc(category.label)}</div>
+          <div class="compact-term-grid">
+            ${category.terms.map((term) => `
+              <button class="compact-term-btn${String(term.rowId || "").startsWith("compact::") ? " compact-term-btn-custom" : ""}"
+                type="button" data-compact-term-key="${esc(termKey(term))}">
+                <code>${esc(term.s)}</code>
+                <span>${esc(term.p)}</span>
+              </button>
+            `).join("")}
+          </div>
+        </div>
+      `).join("") : `<div class="compact-empty">No matches in this group.</div>`}
+    </section>
+  `;
+}
+
+function renderCompactSessionWindow() {
+  const minLabel = state.sessionMinimized ? "▾" : "▴";
+  const groups = compactVisibleGroups();
+  const hasCompose = !!String(state.compactComposeText || "").trim();
+  const undefCount = (state.undefinedTerms || []).length;
+  const micLabel = state.compactDictationActive ? "Stop mic" : "Mic";
+  const groupOptions = compactGroupOptions();
+
+  return `
+    <aside class="session-window compact-session-window ${state.themeMode}${state.sessionMinimized ? " minimized" : ""}"
+      id="bp-session-window"
+      style="left:${state.sessionX}px;top:${state.sessionY}px;width:${state.sessionWidth}px;${state.sessionMinimized ? "" : `height:${state.sessionHeight}px;min-height:${SESSION_MIN_HEIGHT}px;`}">
+      ${renderCompactQuickHeader(minLabel, undefCount)}
+      ${state.sessionMinimized ? "" : `
+        <div class="compact-session-body">
+          <section class="compact-panel-block compact-search-block">
+            <div class="compact-block-head">
+              <span>Search</span>
+              <span>${esc(String(state.compactQuery || "").trim() ? "live" : "all")}</span>
+            </div>
+            <label class="compact-search-shell" for="bp-compact-search">
+              <input id="bp-compact-search" type="search" placeholder="Search term text or shortcut"
+                value="${esc(state.compactQuery || "")}" />
+            </label>
+          </section>
+
+          <section class="compact-panel-block compact-compose-block">
+            <div class="compact-block-head">
+              <span>Compose</span>
+              <span>${currentWriteState() ? "field armed" : "no field"}</span>
+            </div>
+            <textarea class="compact-compose-area" id="bp-compact-compose" rows="4"
+              placeholder="Type here, click term buttons below, or dictate into Compose.">${esc(state.compactComposeText || "")}</textarea>
+            ${state.compactInterimTranscript ? `<div class="compact-interim-text">${esc(state.compactInterimTranscript)}</div>` : ""}
+            <div class="compact-compose-actions">
+              <span class="compact-field-state${currentWriteState() ? " compact-field-state-ready" : ""}">${currentWriteState() ? "Field armed" : "Click a page field to arm print"}</span>
+              <button class="compact-action-btn${state.compactDictationActive ? " active" : ""}${state.compactSpeechAvailable ? "" : " disabled"}"
+                id="bp-compact-mic" type="button">${micLabel}</button>
+              <button class="compact-action-btn compact-print-btn${currentWriteState() ? " ready" : ""}"
+                id="bp-compact-print" type="button" ${!hasCompose ? "disabled" : ""}>Print</button>
+              <button class="compact-action-btn" id="bp-compact-clear" type="button">Clear</button>
+            </div>
+            ${renderCompactStatusBar()}
+          </section>
+
+          <section class="compact-panel-block compact-custom-block">
+            <div class="compact-block-head">
+              <span>Save Custom Term</span>
+              <span>runtime</span>
+            </div>
+            <div class="compact-custom-form">
+              <input id="bp-compact-custom-term" type="text" placeholder="term"
+                value="${esc(state.compactCustomTermText || "")}" />
+              <input id="bp-compact-custom-shortcut" type="text" placeholder="shortcut"
+                value="${esc(state.compactCustomTermShortcut || "")}" />
+              <select id="bp-compact-custom-group">
+                ${groupOptions.map((group) => `<option value="${esc(group.key)}"${group.key === state.compactCustomTermGroup ? " selected" : ""}>${esc(group.label)}</option>`).join("")}
+              </select>
+              <button class="compact-action-btn" id="bp-compact-custom-save" type="button">Save</button>
+            </div>
+          </section>
+
+          ${renderCompactHistorySection()}
+          ${renderCompactPhrasesSection()}
+          ${renderCompactUndefinedSection()}
+
+          <div class="compact-groups-wrap">
+            ${groups.map(renderCompactGroupSection).join("")}
+          </div>
+          <div class="session-window-resizer" id="bp-session-resizer" aria-hidden="true"></div>
+        </div>
+      `}
+    </aside>
+  `;
+}
+
 function renderSessionWindow() {
   const pos = clampSessionPosition(state.sessionX, state.sessionY, state.sessionWidth, state.sessionHeight);
   state.sessionX = pos.x;
@@ -1114,6 +1327,7 @@ function renderSessionWindow() {
   state.sessionWidth = pos.width;
   state.sessionHeight = pos.height;
   if (!state.sessionOpen) return "";
+  if (isCompactQuickTagMode()) return renderCompactSessionWindow();
   const minLabel = state.sessionMinimized ? "▾" : "▴";
   const hasItems = state.sessionItems.length > 0;
   const undefTerms = state.undefinedTerms || [];
@@ -1635,6 +1849,8 @@ function renderEditorView() {
   }
 
   function bindDelegatedEvents() {
+    syncDomRefs();
+    if (!contentNode) return;
     // Persistent delegated drag handlers bind once on contentNode.
     contentNode.addEventListener("dragstart", (event) => {
       const composerPill = event.target.closest("[data-pill-id]");
@@ -1725,6 +1941,38 @@ function renderEditorView() {
           render();
           // Do not return — allow the click to proceed normally
         }
+      }
+
+      if (t.closest("#bp-qt-mode-toggle")) {
+        if (state.compactDictationActive) toggleCompactDictation();
+        state.quickTagMode = isCompactQuickTagMode() ? "legacy" : "compact";
+        render();
+        return;
+      }
+
+      const compactHistoryUse = t.closest("[data-compact-history-use]");
+      if (compactHistoryUse) {
+        useCompactHistoryEntry(compactHistoryUse.dataset.compactHistoryUse);
+        return;
+      }
+
+      const compactPhraseUse = t.closest("[data-compact-phrase-use]");
+      if (compactPhraseUse) {
+        useCompactPhraseEntry(compactPhraseUse.dataset.compactPhraseUse);
+        return;
+      }
+
+      const compactUndefinedUse = t.closest("[data-compact-undefined-use]");
+      if (compactUndefinedUse) {
+        const entry = (state.undefinedTerms || [])[Number(compactUndefinedUse.dataset.compactUndefinedUse)];
+        if (entry) queueCompactCustomTerm(entry);
+        return;
+      }
+
+      const compactTerm = t.closest("[data-compact-term-key]");
+      if (compactTerm) {
+        appendCompactTermByKey(compactTerm.dataset.compactTermKey);
+        return;
       }
 
       const toolRemove = t.closest("[data-tool-remove]");
@@ -2398,6 +2646,12 @@ function renderEditorView() {
         render(); return;
       }
 
+      if (["bp-compact-custom-term", "bp-compact-custom-shortcut"].includes(t.id) && event.key === "Enter") {
+        event.preventDefault();
+        saveCompactCustomTerm();
+        return;
+      }
+
       // Tab in composer toggles connectives panel
       if (t.id === "bp-composer-text" && event.key === "Tab") {
         event.preventDefault();
@@ -2551,6 +2805,8 @@ function renderEditorView() {
 
     contentNode.addEventListener("change", (event) => {
       const t = event.target;
+      if (t.id === "bp-compact-compose") { collectCompactUndefinedTerms(t.value); return; }
+      if (t.id === "bp-compact-custom-group") { state.compactCustomTermGroup = t.value; return; }
       if (t.id === "bp-template-select") {
         const idx = Number(t.value);
         if (!isNaN(idx) && state.quickTemplates[idx]) {
@@ -2610,6 +2866,14 @@ function renderEditorView() {
       const t = event.target;
 
       if (t.id === "bp-search") { syncLiveSearch(t.value); return; }
+      if (t.id === "bp-compact-search") { state.compactQuery = t.value; render(); return; }
+      if (t.id === "bp-compact-compose") {
+        state.compactComposeText = t.value;
+        state.compactInterimTranscript = "";
+        return;
+      }
+      if (t.id === "bp-compact-custom-term") { state.compactCustomTermText = t.value; return; }
+      if (t.id === "bp-compact-custom-shortcut") { state.compactCustomTermShortcut = t.value; return; }
       if (t.id === "bp-composer-text") {
         if (state.quickComposePinned) {
           state.composerText = getComposerPendingTextFromValue(t.value);
@@ -2681,7 +2945,26 @@ function renderEditorView() {
         if (!state.visible) { state.visible = true; render(); }
         return;
       }
-      if (id === "bp-close") { clearSessionWorkingState({ closeSessionUi: true, closeComposerUi: true, closeToolTrays: true }); state.appActive = false; state.visible = false; savePrefs(); render(); return; }
+      if (id === "bp-compact-mic") { toggleCompactDictation(); return; }
+      if (id === "bp-compact-print") { performCompactPrint(); return; }
+      if (id === "bp-compact-clear") {
+        state.compactComposeText = "";
+        state.compactInterimTranscript = "";
+        state.compactStatusMessage = "";
+        state.compactStatusKind = "info";
+        render();
+        return;
+      }
+      if (id === "bp-compact-custom-save") { saveCompactCustomTerm(); return; }
+      if (id === "bp-close") {
+        if (state.compactDictationActive) toggleCompactDictation();
+        clearSessionWorkingState({ closeSessionUi: true, closeComposerUi: true, closeToolTrays: true });
+        state.appActive = false;
+        state.visible = false;
+        savePrefs();
+        render();
+        return;
+      }
       if (id === "bp-theme") { state.themeMode = state.themeMode === "dark" ? "light" : "dark"; savePrefs(); render(); return; }
       if (id === "bp-help-hover") {
         state.helpHover = !state.helpHover;
@@ -3009,7 +3292,7 @@ function renderEditorView() {
           state.tempTermsDeleteTarget = null;
           state.tempTermsEditTarget = null;
         }
-        savePrefs(); render(); return;
+        savePrefs(); saveCompactData(); render(); return;
       }
       if (id === "bp-temp-edit-toggle") {
         if (state.tempTermsEditTarget !== null) {
@@ -3030,13 +3313,13 @@ function renderEditorView() {
         } else {
           state.tempTermsDeleteTarget = idx;
         }
-        savePrefs(); render(); return;
+        savePrefs(); saveCompactData(); render(); return;
       }
       const tempRemove = t.closest("[data-temp-remove]");
       if (tempRemove && !state.tempTermsDeleteMode) {
         const idx = Number(tempRemove.dataset.tempRemove);
         state.undefinedTerms = state.undefinedTerms.filter((_, i) => i !== idx);
-        savePrefs(); render(); return;
+        savePrefs(); saveCompactData(); render(); return;
       }
       const tempEditBtn = t.closest("[data-temp-edit]");
       if (tempEditBtn) {
@@ -3058,6 +3341,7 @@ function renderEditorView() {
         state.tempTermsEditTarget = null; render(); return;
       }
       if (id === "bp-session-minimize") {
+        if (!state.sessionMinimized && state.compactDictationActive) toggleCompactDictation();
         state.sessionMinimized = !state.sessionMinimized;
         if (state.sessionMinimized) { state.quickHotkeysArmed = false; state.quickMoveMode = null; state.quickMovePillIdx = null; }
         savePrefs(); render(); return;
@@ -3066,7 +3350,16 @@ function renderEditorView() {
       if (id === "bp-confirm-cancel") { state.confirmExitOpen = false; render(); return; }
       if (id === "bp-confirm-ok") { state.confirmExitOpen = false; saveAndExportAll(); render(); return; }
       if (id === "bp-session-toggle") { state.sessionOpen = !state.sessionOpen; savePrefs(); render(); return; }
-      if (id === "bp-session-close") { state.sessionOpen = false; state.quickHotkeysArmed = false; state.quickMoveMode = null; state.quickMovePillIdx = null; savePrefs(); render(); return; }
+      if (id === "bp-session-close") {
+        if (state.compactDictationActive) toggleCompactDictation();
+        state.sessionOpen = false;
+        state.quickHotkeysArmed = false;
+        state.quickMoveMode = null;
+        state.quickMovePillIdx = null;
+        savePrefs();
+        render();
+        return;
+      }
       if (id === "bp-session-clear") { clearSessionWorkingState({ closeSessionUi: false, closeComposerUi: false, closeToolTrays: true }); state.editorMessage = "Session working state cleared"; savePrefs(); render(); return; }
       if (id === "bp-preview-clear") {
         state.composerText = "";
@@ -3176,6 +3469,7 @@ function renderEditorView() {
             state.undefinedTerms = [q, ...state.undefinedTerms].slice(0, 200);
             state.editorMessage = `"${q}" saved to undefined terms`;
             savePrefs();
+            saveCompactData();
           } else {
             state.editorMessage = `"${q}" already in undefined terms`;
           }
@@ -3254,14 +3548,14 @@ function renderEditorView() {
       if (id === "bp-undefined-clear") {
         state.undefinedTerms = [];
         state.editorMessage = "Undefined terms cleared";
-        savePrefs(); render(); return;
+        savePrefs(); saveCompactData(); render(); return;
       }
       const undefinedRemove = t.closest("[data-undefined-remove]");
       if (undefinedRemove) {
         const idx = Number(undefinedRemove.dataset.undefinedRemove);
         if (!isNaN(idx)) {
           state.undefinedTerms = (state.undefinedTerms || []).filter((_, i) => i !== idx);
-          savePrefs(); render();
+          savePrefs(); saveCompactData(); render();
         }
         return;
       }
@@ -3290,6 +3584,8 @@ function renderEditorView() {
   }
 
   function bindEvents() {
+    syncDomRefs();
+    if (!contentNode || !shadow) return;
     const shell = contentNode.querySelector(".shell");
 
     shell?.addEventListener("mouseenter", () => {
@@ -3370,6 +3666,8 @@ function renderEditorView() {
   }
 
   function updateHelpHighlight() {
+    syncDomRefs();
+    if (!shadow) return;
     const activeKey = state.pinnedKey || state.previewKey;
     shadow.querySelectorAll(".help-entry").forEach((entry) => {
       entry.classList.toggle("active", !!activeKey && entry.dataset.helpKey === activeKey);
@@ -3383,6 +3681,8 @@ function renderEditorView() {
   }
 
 function syncHoverTooltip() {
+  syncDomRefs();
+  if (!shadow) return;
   const titleEl = shadow.getElementById("bp-def-bar-title");
   const bodyEl = shadow.getElementById("bp-def-bar-body");
   const bar = shadow.getElementById("bp-def-bar");
@@ -3415,6 +3715,8 @@ function syncHoverTooltip() {
 }
 
 function syncToolTrayViewport() {
+  syncDomRefs();
+  if (!shadow) return;
   const shellEl = shadow.querySelector('.shell');
   const stack = shadow.querySelector('.tool-tray-stack');
   if (!shellEl || !stack) return;
@@ -3461,6 +3763,8 @@ function syncToolTrayViewport() {
 }
 
 function syncSessionViewport() {
+  syncDomRefs();
+  if (!shadow) return;
   const sessionWin = shadow.getElementById('bp-session-window');
   if (!sessionWin) return;
   const pos = clampSessionPosition(state.sessionX, state.sessionY, state.sessionWidth, state.sessionHeight);
