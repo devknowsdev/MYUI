@@ -99,6 +99,14 @@ chrome.action.onClicked.addListener(async (tab) => {
         target: { tabId }, world: "MAIN", files: ["render.js"]
       });
       await chrome.scripting.executeScript({
+        target: { tabId },
+        world: "MAIN",
+        func: (assetBaseUrl) => {
+          globalThis.__MYUI_ASSET_BASE__ = assetBaseUrl;
+        },
+        args: [chrome.runtime.getURL("")]
+      });
+      await chrome.scripting.executeScript({
         target: { tabId }, world: "MAIN", files: ["content.js"]
       });
       injectedTabs.add(tabId);

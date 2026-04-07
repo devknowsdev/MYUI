@@ -15,9 +15,9 @@ globalThis.__myui_content_loaded = true;
   const PANEL_MIN_HEIGHT = 260;
   const PANEL_MAX_HEIGHT = 720;
   const SESSION_MIN_WIDTH = 220;
-  const SESSION_MAX_WIDTH = 520;
+  const SESSION_MAX_WIDTH = 720;
   const SESSION_MIN_HEIGHT = 160;
-  const SESSION_MAX_HEIGHT = 520;
+  const SESSION_MAX_HEIGHT = 900;
 
   const STORAGE_KEY = "myuiPrefsV1";
   const LEGACY_STORAGE_KEYS = [];
@@ -28,9 +28,87 @@ globalThis.__myui_content_loaded = true;
   globalThis.MYUI_BUILD = MYUI_BUILD;
   globalThis.__MYUI_BUILD__ = MYUI_BUILD;
   globalThis.__MYUI_PATCH_LABEL__ = "persistent-armed-field-print-target-live-safe";
+  const REQUESTED_RENDER_BIND_PATH = globalThis.__MYUI_RENDER_BIND_PATH__ === "legacy-shared"
+    ? "legacy-shared"
+    : "compact-only";
+  const ACTIVE_RENDER_BIND_PATH = REQUESTED_RENDER_BIND_PATH === "compact-only"
+    && typeof globalThis.__MYUI_createCompactRenderModule === "function"
+      ? "compact-only"
+      : "legacy-shared";
+  if (REQUESTED_RENDER_BIND_PATH === "compact-only" && ACTIVE_RENDER_BIND_PATH !== "compact-only") {
+    console.warn("[MYUI] Compact-only render/bind path requested but compact render factory is unavailable. Falling back to legacy shared render path.");
+  }
   const COMPACT_HISTORY_LIMIT = 40;
   const COMPACT_PHRASE_LIMIT = 160;
-  const COMPACT_SOURCE_FILE = "compact_slim_pack_v3.json";
+  const COMPACT_UNDEFINED_STOP_WORDS = new Set([
+    "a", "an", "the", "and", "or", "but", "if", "then", "than",
+    "of", "in", "on", "at", "by", "for", "from", "to", "into", "onto",
+    "with", "without", "over", "under", "through", "across", "between",
+    "after", "before", "during", "around", "this", "that", "these", "those",
+    "it", "its", "i", "me", "my", "you", "your", "we", "our", "they", "their",
+    "he", "his", "she", "her", "them", "is", "are", "was", "were", "be",
+    "been", "being", "do", "does", "did", "doing", "have", "has", "had",
+    "having", "can", "could", "should", "would", "may", "might", "must",
+    "will", "just", "very", "more", "most", "less"
+  ]);
+  const COMPACT_SOURCE_FILE = "final_terms_codex_package/myui_compact_terms_2026-04-07_master_updated.csv";
+  const COMPACT_CANONICAL_UPPER_TOKENS = new Map([
+    ["adsr", "ADSR"],
+    ["am", "AM"],
+    ["bpm", "BPM"],
+    ["daw", "DAW"],
+    ["edm", "EDM"],
+    ["eq", "EQ"],
+    ["fm", "FM"],
+    ["lfo", "LFO"],
+    ["lufs", "LUFS"],
+    ["midi", "MIDI"],
+    ["rms", "RMS"],
+    ["vst", "VST"]
+  ]);
+  const COMPACT_ROMAN_NUMERALS = new Set(["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"]);
+  const COMPACT_VIBE_ALLOWED_LY_TERMS = new Set(["melancholy"]);
+  const COMPACT_VIBE_CATEGORY_HINT = /\b(vibe|feel|feeling|emotion|energy|mood|dynamic|dynamics)\b/;
+  const COMPACT_TEXTURE_TAXONOMY_HINT = /\b(texture|timbre|tone|tonal|textural|grain|gravel|warmth|bright(?:ness)?|dark(?:ness)?|airy|breath(?:y|ily)?|muddy|gritty|shimmer(?:y)?|lush|hollow|thin|thick|organic(?:ally)?|synthe(?:tic|tically)|mechanic(?:al|ally)|digital(?:ly)?|analog(?:ue)?|glassy|glossy|crisp(?:y)?|distort(?:ed|ion)?|saturat(?:ed|ion))\b/;
+  const COMPACT_PRODUCTION_TAXONOMY_HINT = /\b(production|record(?:ing)?|mix|master(?:ing)?|effect|effects|fx|reverb|delay|compress(?:ion)?|eq|stereo|spatial|processing|daw|vst|lufs|rms)\b/;
+  const COMPACT_ARRANGEMENT_TAXONOMY_HINT = /\b(arrangement|arrange|structure|section|performance|delivery|harmony|melody|rhythm|groove|motion|canon(?:ical(?:ly)?)?|counterpoint|contrapuntal(?:ly)?|chromatic(?:ally)?|diatonic(?:ally)?|modal(?:ly)?|polyrhythm(?:ic(?:ally)?)?|theme|thematic(?:ally)?|progression|style|genre)\b/;
+  const COMPACT_RUNTIME_SECTION_META = {
+    instruments: {
+      sectionKey: "instruments",
+      sectionLabel: "Instruments",
+      category: "Instruments / sources",
+      flowBucket: "Instruments",
+      functionBucket: "Instrumental"
+    },
+    vibe: {
+      sectionKey: "vibe",
+      sectionLabel: "Vibe",
+      category: "Mood / feeling",
+      flowBucket: "Energy",
+      functionBucket: "Expressive"
+    },
+    texture: {
+      sectionKey: "texture",
+      sectionLabel: "Texture",
+      category: "Texture / timbre",
+      flowBucket: "Texture",
+      functionBucket: "Textural"
+    },
+    arrangement: {
+      sectionKey: "arrangement",
+      sectionLabel: "Arrangement",
+      category: "Performance / delivery",
+      flowBucket: "Form",
+      functionBucket: "Arrangement"
+    },
+    production: {
+      sectionKey: "production",
+      sectionLabel: "Production",
+      category: "Production / recording / effects",
+      flowBucket: "Production",
+      functionBucket: "Production"
+    }
+  };
   const COMPACT_GROUPS = [
     {
       key: "instruments",
@@ -44,10 +122,10 @@ globalThis.__myui_content_loaded = true;
     },
     {
       key: "feel",
-      label: "Vibe / Feel / Energy",
-      sectionKey: "feel",
-      sectionLabel: "Feel",
-      category: "Custom Feel",
+      label: "Vibe",
+      sectionKey: "vibe",
+      sectionLabel: "Vibe",
+      category: "Custom Vibe",
       flowBucket: "Energy",
       functionBucket: "Expressive",
       palette: { h: 340, s: 24 }
@@ -55,8 +133,8 @@ globalThis.__myui_content_loaded = true;
     {
       key: "texture",
       label: "Texture",
-      sectionKey: "sound",
-      sectionLabel: "Sound",
+      sectionKey: "texture",
+      sectionLabel: "Texture",
       category: "Custom Texture",
       flowBucket: "Texture",
       functionBucket: "Textural",
@@ -65,12 +143,22 @@ globalThis.__myui_content_loaded = true;
     {
       key: "arrangement",
       label: "Arrangement",
-      sectionKey: "form",
-      sectionLabel: "Form",
+      sectionKey: "arrangement",
+      sectionLabel: "Arrangement",
       category: "Custom Arrangement",
       flowBucket: "Form",
       functionBucket: "Arrangement",
       palette: { h: 40, s: 24 }
+    },
+    {
+      key: "production",
+      label: "Production",
+      sectionKey: "production",
+      sectionLabel: "Production",
+      category: "Custom Production",
+      flowBucket: "Production",
+      functionBucket: "Production",
+      palette: { h: 215, s: 26 }
     }
   ];
   const SECTION_ORDER = ["connect", "feel", "sound", "form", "instruments", "mix"];
@@ -101,6 +189,8 @@ globalThis.__myui_content_loaded = true;
   let MASTER_ROWS = DEFAULT_MASTER_ROWS.map((row) => ({ ...row }));
   let CUSTOM_TERM_ENTRIES = [];
   let COMPACT_SOURCE_ROWS = [];
+  let COMPACT_ACTIVE_ROWS = [];
+  let LEGACY_COMPACT_CUSTOM_ENTRIES = [];
   let COMPACT_TERMS = [];
   let COMPACT_TERM_MAP = new Map();
   let TERMS = [];
@@ -172,14 +262,62 @@ globalThis.__myui_content_loaded = true;
     uiScale: 1.05,
     panelOpacity: 0.96,
     sessionOpen: false,
-    sessionX: Math.max(24, window.innerWidth - 336),
+    sessionX: Math.max(24, window.innerWidth - 432),
     sessionY: 96,
-    sessionWidth: 288,
-    sessionHeight: 232,
+    sessionWidth: 380,
+    sessionHeight: 560,
     sessionItems: [],
     sessionMinimized: false,
     sessionPage: 0,
     quickTagMode: "compact",
+    compactTermsOpen: true,
+    compactTermsX: Math.max(24, window.innerWidth - 1312),
+    compactTermsY: 96,
+    compactTermsWidth: 420,
+    compactTermsHeight: 560,
+    compactTermsMinimized: false,
+    compactTagsOpen: true,
+    compactTagsX: Math.max(24, window.innerWidth - 868),
+    compactTagsY: 96,
+    compactTagsWidth: 360,
+    compactTagsHeight: 560,
+    compactTagsMinimized: false,
+    compactPrintsOpen: false,
+    compactPrintsX: Math.max(24, window.innerWidth - 868),
+    compactPrintsY: 404,
+    compactPrintsWidth: 420,
+    compactPrintsHeight: 320,
+    compactPrintsMinimized: false,
+    compactPhrasesOpen: false,
+    compactPhrasesX: Math.max(24, window.innerWidth - 1308),
+    compactPhrasesY: 404,
+    compactPhrasesWidth: 420,
+    compactPhrasesHeight: 320,
+    compactPhrasesMinimized: false,
+    compactPhrasesSentencesOpen: true,
+    compactPhrasesManualOpen: true,
+    compactSessionTermsOpen: false,
+    compactSessionTermsX: Math.max(24, window.innerWidth - 1240),
+    compactSessionTermsY: 96,
+    compactSessionTermsWidth: 340,
+    compactSessionTermsHeight: 480,
+    compactSessionTermsMinimized: false,
+    compactSessionTermsOrderMode: "category",
+    compactMasterComposeOpen: true,
+    compactMasterPhrasesOpen: true,
+    compactMasterHistoryOpen: false,
+    compactTermsSearchOpen: true,
+    compactTermsResultsOpen: true,
+    compactTermsCustomOpen: true,
+    compactTermsLibraryOpen: true,
+    compactTermsUndefinedOpen: true,
+    compactTermsActiveSection: "instruments",
+    compactTermsCategoryOpen: {},
+    compactGroupInstrumentsOpen: true,
+    compactGroupFeelOpen: true,
+    compactGroupTextureOpen: true,
+    compactGroupArrangementOpen: true,
+    compactGroupProductionOpen: true,
     fullSentenceMode: false,
     composerText: "",
     composerOpen: false,
@@ -191,8 +329,12 @@ globalThis.__myui_content_loaded = true;
     compactCustomTermGroup: "feel",
     compactPrintHistory: [],
     compactPhraseBank: [],
+    compactManualPhraseBank: [],
+    compactManualPhraseText: "",
     compactStatusMessage: "",
     compactStatusKind: "info",
+    compactSitePrintPromptOpen: false,
+    compactSitePrintPromptText: "",
     compactInterimTranscript: "",
     compactDictationActive: false,
     compactSpeechAvailable: false,
@@ -290,6 +432,8 @@ globalThis.__myui_content_loaded = true;
   let injected = false;
   let lastFocusedField = null;
   let armedFieldSelection = null;
+  let compactArmedField = null;
+  let compactArmedFieldSelection = null;
   let collapseTimer = null;
   let isResizing = false;
   let dockDragUntil = 0;
@@ -303,6 +447,111 @@ globalThis.__myui_content_loaded = true;
   let _initReady = false;
   let _pendingToggle = false;
   let _listenCleanup = null;
+  let _queuedComposerRestoreSnapshot = null;
+  let _queuedComposerRestoreUntil = 0;
+  let _pendingCompactMicStopCommand = null;
+  let _compactMicStopRequested = false;
+  let _compactMicStopCommandTimer = null;
+
+  function isCompactOnlyRenderBindPath() {
+    return ACTIVE_RENDER_BIND_PATH === "compact-only";
+  }
+
+  function getStoredArmedField() {
+    return isCompactOnlyRenderBindPath() ? compactArmedField : lastFocusedField;
+  }
+
+  function setStoredArmedField(field) {
+    if (isCompactOnlyRenderBindPath()) compactArmedField = field;
+    else lastFocusedField = field;
+  }
+
+  function getStoredArmedFieldSelection() {
+    return isCompactOnlyRenderBindPath() ? compactArmedFieldSelection : armedFieldSelection;
+  }
+
+  function setStoredArmedFieldSelection(snapshot) {
+    if (isCompactOnlyRenderBindPath()) compactArmedFieldSelection = snapshot;
+    else armedFieldSelection = snapshot;
+  }
+
+  function clearStoredArmedFieldSelection() {
+    if (isCompactOnlyRenderBindPath()) compactArmedFieldSelection = null;
+    else armedFieldSelection = null;
+  }
+
+  function shouldTrackDocumentArmedField() {
+    if (!state.appActive || !state.sessionOpen) return false;
+    if (isCompactOnlyRenderBindPath()) return true;
+    return !!(state.writeMode || isCompactQuickTagMode());
+  }
+
+  function shouldInstallLegacyDocumentHotkeys() {
+    return !isCompactOnlyRenderBindPath();
+  }
+
+  function shouldStartLegacyListenRuntime() {
+    return !isCompactOnlyRenderBindPath();
+  }
+
+  function shouldInstallCompactWindowHotkeys() {
+    return isCompactOnlyRenderBindPath();
+  }
+
+  function queuePrefsSave(delay = 180) {
+    clearTimeout(_savePrefsTimer);
+    _savePrefsTimer = setTimeout(savePrefs, delay);
+  }
+
+  const COMPACT_WINDOW_HOTKEYS = {
+    Digit0: { label: "MYUI", openKey: "sessionOpen", minimizedKey: "sessionMinimized", master: true },
+    Digit1: { label: "Prints", openKey: "compactPrintsOpen", minimizedKey: "compactPrintsMinimized" },
+    Digit2: { label: "Phrases", openKey: "compactPhrasesOpen", minimizedKey: "compactPhrasesMinimized" },
+    Digit3: { label: "Terms", openKey: "compactTermsOpen", minimizedKey: "compactTermsMinimized" },
+    Digit4: { label: "Tags", openKey: "compactTagsOpen", minimizedKey: "compactTagsMinimized" },
+    Digit5: { label: "Session", openKey: "compactSessionTermsOpen", minimizedKey: "compactSessionTermsMinimized" }
+  };
+
+  function ensureCompactOnlyAppActive() {
+    if (state.appActive) return false;
+    state.appActive = true;
+    enterCompactQuickTagMode();
+    return true;
+  }
+
+  function toggleCompactWindowFromHotkey(binding) {
+    if (!binding) return false;
+    const activated = ensureCompactOnlyAppActive();
+    if (binding.master) {
+      state.sessionOpen = true;
+      state.sessionMinimized = activated ? false : !state.sessionMinimized;
+      queuePrefsSave();
+      render();
+      return true;
+    }
+    if (state.sessionMinimized) return true;
+    if (activated) {
+      state[binding.openKey] = true;
+      state[binding.minimizedKey] = false;
+    } else {
+      state[binding.openKey] = !state[binding.openKey];
+      if (state[binding.openKey]) state[binding.minimizedKey] = false;
+    }
+    queuePrefsSave();
+    render();
+    return true;
+  }
+
+  function handleCompactWindowHotkeys(event) {
+    if (!shouldInstallCompactWindowHotkeys()) return;
+    if (!_initReady || event.defaultPrevented || event.isComposing || event.repeat) return;
+    if (!event.metaKey || !event.altKey || event.ctrlKey || event.shiftKey) return;
+    const binding = COMPACT_WINDOW_HOTKEYS[String(event.code || "")];
+    if (!binding) return;
+    event.preventDefault();
+    event.stopPropagation();
+    toggleCompactWindowFromHotkey(binding);
+  }
 
 
   // ── Listen mode ─────────────────────────────────────────────────────────────
@@ -437,8 +686,7 @@ globalThis.__myui_content_loaded = true;
     }
 
     if (didChange) {
-      clearTimeout(_savePrefsTimer);
-      _savePrefsTimer = setTimeout(savePrefs, 600);
+      queuePrefsSave(600);
       render();
     }
   }
@@ -476,6 +724,44 @@ globalThis.__myui_content_loaded = true;
 
   function undefinedTermShortcut(entry) {
     return typeof entry === "object" && entry?.shortcut ? entry.shortcut : "";
+  }
+
+  function undefinedSessionKey(text) {
+    const clean = String(text || "").trim();
+    const norm = normalize(clean);
+    return norm ? `undefined::${norm}` : "";
+  }
+
+  function isUndefinedSessionItem(item) {
+    return String(item?.key || "").startsWith("undefined::");
+  }
+
+  function upsertUndefinedSessionItem(entry) {
+    const text = undefinedTermText(entry).trim();
+    const key = undefinedSessionKey(text);
+    if (!text || !key) return false;
+    const now = Date.now();
+    const shortcut = undefinedTermShortcut(entry).trim();
+    const next = state.sessionItems.filter((item) => item.key !== key);
+    const existing = state.sessionItems.find((item) => item.key === key);
+    next.unshift({
+      key,
+      shortcut: shortcut || String(existing?.shortcut || "").trim(),
+      text,
+      count: (existing?.count || 0) + 1,
+      updatedAt: now
+    });
+    state.sessionItems = next.slice(0, 80);
+    state.sessionOpen = true;
+    return true;
+  }
+
+  function removeUndefinedSessionItem(entry) {
+    const key = undefinedSessionKey(typeof entry === "string" ? entry : undefinedTermText(entry));
+    if (!key) return false;
+    const before = state.sessionItems.length;
+    state.sessionItems = state.sessionItems.filter((item) => item.key !== key);
+    return state.sessionItems.length !== before;
   }
 
   function sortedConnectives() {
@@ -546,6 +832,10 @@ globalThis.__myui_content_loaded = true;
     return value === true || value === 1 || value === "1" || String(value || "").toLowerCase() === "true";
   }
 
+  function escapeRegex(value) {
+    return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
   function makeRowId(row, fallbackIndex) {
     return row?.id || [row?.code || "", row?.section_key || row?.sectionKey || "", row?.category || row?.label || "", row?.shortcut || row?.s || "", normalize(row?.term || row?.p || ""), fallbackIndex].join("::");
   }
@@ -575,8 +865,138 @@ globalThis.__myui_content_loaded = true;
     return normalized;
   }
 
+  function normalizeCompactShortcutValue(value) {
+    const text = String(value || "").trim();
+    if (!text) return "";
+    const lower = text.toLowerCase();
+    if (COMPACT_CANONICAL_UPPER_TOKENS.has(lower) && text === text.toUpperCase()) return COMPACT_CANONICAL_UPPER_TOKENS.get(lower);
+    if (COMPACT_ROMAN_NUMERALS.has(lower) && text === text.toUpperCase()) return lower.toUpperCase();
+    return lower;
+  }
+
+  function normalizeCompactTermValue(value) {
+    let text = String(value || "").trim().toLowerCase();
+    if (!text) return "";
+
+    text = text.replace(/\b(?:i|ii|iii|iv|v|vi|vii|viii|ix|x)\b/g, (match) => {
+      const lower = match.toLowerCase();
+      return COMPACT_ROMAN_NUMERALS.has(lower) ? lower.toUpperCase() : match;
+    });
+
+    COMPACT_CANONICAL_UPPER_TOKENS.forEach((upper, lower) => {
+      const singularPattern = new RegExp(`\\b${escapeRegex(lower)}\\b`, "g");
+      const pluralPattern = new RegExp(`\\b${escapeRegex(lower)}s\\b`, "g");
+      text = text.replace(pluralPattern, `${upper}s`);
+      text = text.replace(singularPattern, upper);
+    });
+
+    return text;
+  }
+
+  function compactCanonicalSectionKey(value) {
+    const key = normalize(value);
+    if (key === "feel") return "vibe";
+    if (key === "sound") return "texture";
+    if (key === "form") return "arrangement";
+    if (key === "mix") return "production";
+    return key;
+  }
+
+  function compactCategorySectionKey(value) {
+    const key = normalize(value);
+    if (!key) return "";
+    if (key === "instruments / voices") return "instruments";
+    if (key === "descriptors / mood / texture") return "vibe";
+    if (key === "production / recording / effects") return "production";
+    if (key === "form / arrangement / function") return "arrangement";
+    if (key === "harmony / melody / tonality") return "arrangement";
+    if (key === "performance / technique") return "arrangement";
+    if (key === "genre / style") return "arrangement";
+    if (key === "rhythm / tempo / meter") return "arrangement";
+    if (key === "annotation / relational phrases") return "arrangement";
+    return "";
+  }
+
+  function compactVibeTermIsAdverbial(term) {
+    const words = normalize(term).split(/\s+/).filter(Boolean);
+    if (!words.length) return false;
+    const lastWord = words[words.length - 1];
+    return /ly$/.test(lastWord) && !COMPACT_VIBE_ALLOWED_LY_TERMS.has(lastWord);
+  }
+
+  function compactResolvedSectionMeta(row, normalizedTerm) {
+    const rawSectionKey = compactCanonicalSectionKey(row?.section_key || row?.sectionKey || "");
+    const rawCategory = String(row?.category || row?.label || "").trim();
+    const rawFlowBucket = String(row?.flow_bucket || row?.flowBucket || "").trim();
+    const rawFunctionBucket = String(row?.function_bucket || row?.functionBucket || "").trim();
+    const normalizedCategory = normalize(rawCategory);
+    const categorySectionKey = compactCategorySectionKey(rawCategory);
+    const inferredGroupKey = compactCanonicalSectionKey(compactGroupKeyFromValue([
+      rawSectionKey,
+      rawCategory,
+      rawFlowBucket,
+      rawFunctionBucket,
+      row?.section_label || row?.sectionLabel || "",
+      row?.notes || ""
+    ].filter(Boolean).join(" ")));
+    const initialSectionKey = rawSectionKey || categorySectionKey || inferredGroupKey || "vibe";
+    const shouldIgnoreCategoryForVibeSplit = categorySectionKey === "vibe"
+      && normalizedCategory === "descriptors / mood / texture";
+    const taxonomyHaystack = normalize([
+      normalizedTerm,
+      shouldIgnoreCategoryForVibeSplit ? "" : rawCategory,
+      rawFlowBucket,
+      rawFunctionBucket,
+      row?.notes || ""
+    ].filter(Boolean).join(" "));
+    const isVibeCandidate = initialSectionKey === "vibe"
+      || normalizedCategory === "mood / feeling"
+      || COMPACT_VIBE_CATEGORY_HINT.test(normalizedCategory);
+
+    let resolvedSectionKey = initialSectionKey;
+    if (isVibeCandidate) {
+      if (COMPACT_PRODUCTION_TAXONOMY_HINT.test(taxonomyHaystack)) resolvedSectionKey = "production";
+      else if (COMPACT_TEXTURE_TAXONOMY_HINT.test(taxonomyHaystack)) resolvedSectionKey = "texture";
+      else if (COMPACT_ARRANGEMENT_TAXONOMY_HINT.test(taxonomyHaystack)) resolvedSectionKey = "arrangement";
+      else if (compactVibeTermIsAdverbial(normalizedTerm)) resolvedSectionKey = "arrangement";
+      else resolvedSectionKey = "vibe";
+    }
+
+    const sectionMeta = COMPACT_RUNTIME_SECTION_META[resolvedSectionKey] || COMPACT_RUNTIME_SECTION_META.vibe;
+    const movedOutOfVibe = isVibeCandidate && resolvedSectionKey !== "vibe";
+    const shouldResetCategory = movedOutOfVibe && (!rawCategory || normalizedCategory === "mood / feeling");
+
+    return {
+      sectionKey: sectionMeta.sectionKey,
+      sectionLabel: sectionMeta.sectionLabel,
+      category: shouldResetCategory ? sectionMeta.category : (rawCategory || sectionMeta.category),
+      flowBucket: movedOutOfVibe || !rawFlowBucket ? sectionMeta.flowBucket : rawFlowBucket,
+      functionBucket: movedOutOfVibe || !rawFunctionBucket ? sectionMeta.functionBucket : rawFunctionBucket
+    };
+  }
+
+  function normalizeCompactLibraryRow(row, fallbackIndex = 0) {
+    const rawShortcut = row?.shortcut ?? row?.s ?? "";
+    const rawBaseShortcut = row?.base_shortcut ?? row?.baseShortcut ?? "";
+    const rawTerm = row?.term ?? row?.p ?? "";
+    const normalizedTerm = normalizeCompactTermValue(rawTerm);
+    const sectionMeta = compactResolvedSectionMeta(row, normalizedTerm);
+    return normalizeMasterRow({
+      ...row,
+      category: sectionMeta.category,
+      section_key: sectionMeta.sectionKey,
+      section_label: sectionMeta.sectionLabel,
+      flow_bucket: sectionMeta.flowBucket,
+      function_bucket: sectionMeta.functionBucket,
+      shortcut: normalizeCompactShortcutValue(rawShortcut),
+      base_shortcut: rawBaseShortcut ? normalizeCompactShortcutValue(rawBaseShortcut) : "",
+      term: normalizedTerm
+    }, fallbackIndex);
+  }
+
   function compactGroupConfig(groupKey) {
-    return COMPACT_GROUPS.find((group) => group.key === groupKey) || COMPACT_GROUPS[1];
+    const resolvedKey = groupKey === "vibe" ? "feel" : groupKey;
+    return COMPACT_GROUPS.find((group) => group.key === resolvedKey) || COMPACT_GROUPS[1];
   }
 
   function compactGroupOptions() {
@@ -608,10 +1028,13 @@ globalThis.__myui_content_loaded = true;
   function compactGroupKeyFromValue(value) {
     const text = normalize(value);
     if (!text) return "";
+    const categorySectionKey = compactCategorySectionKey(text);
+    if (categorySectionKey) return categorySectionKey === "vibe" ? "feel" : categorySectionKey;
     if (/instrument|source|drum|guitar|bass|synth|vocal|keys|piano|string|horn|woodwind/.test(text)) return "instruments";
-    if (/vibe|feel|energy|emotion|dynamic|movement|mood|rhythm|groove|style|genre/.test(text)) return "feel";
-    if (/texture|tone|sound|production|mix|tonal|textural|timbre/.test(text)) return "texture";
-    if (/arrangement|arrange|form|structure|section|state|performance|delivery|harmony|melody/.test(text)) return "arrangement";
+    if (/vibe|feel|feeling|energy|emotion|dynamic|dynamics|mood/.test(text)) return "feel";
+    if (/production|record|recording|mix|master|mastering|effect|effects|fx|reverb|delay|compress|compression|eq|stereo|spatial|processing/.test(text)) return "production";
+    if (/texture|tone|sound|tonal|textural|timbre|color|grain|surface|warmth|brightness/.test(text)) return "texture";
+    if (/arrangement|arrange|form|structure|section|state|performance|delivery|harmony|melody|rhythm|groove|motion|style|genre/.test(text)) return "arrangement";
     return "";
   }
 
@@ -659,7 +1082,7 @@ globalThis.__myui_content_loaded = true;
     );
     const group = compactGroupConfig(inferredGroupKey || "feel");
     const category = String(item.category_label || item.label || item.sectionLabel || item.category || item.bucket || group.label).trim() || group.label;
-    return normalizeMasterRow({
+    return normalizeCompactLibraryRow({
       id: String(item.id || `slim::${group.key}::${normalize(term)}::${index}`),
       code: String(item.code || item.category || `SLM-${group.key.toUpperCase()}`),
       category,
@@ -680,14 +1103,48 @@ globalThis.__myui_content_loaded = true;
     }, index);
   }
 
+  function cloneCompactLibraryRows(rows) {
+    return (rows || []).map((row, index) => normalizeCompactLibraryRow(row, index));
+  }
+
+  function sanitizeCompactLibraryRows(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+      .map((item, index) => compactSourceItemToRow(item, index))
+      .filter(Boolean);
+  }
+
+  function restoreStoredCompactLibraryRows(items) {
+    if (!Array.isArray(items)) return [];
+    return items
+      .map((item, index) => {
+        if (!item || typeof item !== "object") return null;
+        const directRow = normalizeCompactLibraryRow(item, index);
+        if (directRow.shortcut && directRow.term) return directRow;
+        return compactSourceItemToRow(item, index);
+      })
+      .filter(Boolean);
+  }
+
+  function defaultCompactLibraryRows() {
+    return cloneCompactLibraryRows(COMPACT_SOURCE_ROWS.length ? COMPACT_SOURCE_ROWS : MASTER_ROWS);
+  }
+
+  function activeCompactLibraryRows() {
+    return COMPACT_ACTIVE_ROWS.length ? COMPACT_ACTIVE_ROWS : defaultCompactLibraryRows();
+  }
+
+  function materializeActiveCompactLibraryRows() {
+    if (!COMPACT_ACTIVE_ROWS.length) COMPACT_ACTIVE_ROWS = defaultCompactLibraryRows();
+    return COMPACT_ACTIVE_ROWS;
+  }
+
   function compactBaseRows() {
-    return COMPACT_SOURCE_ROWS.length ? COMPACT_SOURCE_ROWS : MASTER_ROWS;
+    return activeCompactLibraryRows();
   }
 
   function compactRuntimeRows() {
-    return compactBaseRows()
-      .filter((row) => !row.deleted && !row.hidden)
-      .concat(CUSTOM_TERM_ENTRIES.map((entry, index) => compactCustomTermToRow(entry, index)));
+    return compactBaseRows().filter((row) => !row.deleted && !row.hidden);
   }
 
   function rebuildCompactRuntimeData() {
@@ -820,7 +1277,7 @@ globalThis.__myui_content_loaded = true;
     return '"' + text.replace(/"/g, '""') + '"';
   }
 
-  function parseCsvLine(line) {
+  function parseCsvLine(line, delimiter = ",") {
     const fields = [];
     let cur = "", inQuote = false;
     for (let i = 0; i < line.length; i++) {
@@ -831,7 +1288,7 @@ globalThis.__myui_content_loaded = true;
         else { cur += ch; }
       } else {
         if (ch === '"') { inQuote = true; }
-        else if (ch === ',') { fields.push(cur.trim()); cur = ""; }
+        else if (ch === delimiter) { fields.push(cur.trim()); cur = ""; }
         else { cur += ch; }
       }
     }
@@ -839,12 +1296,38 @@ globalThis.__myui_content_loaded = true;
     return fields;
   }
 
+  function detectDelimitedTextSeparator(raw) {
+    const candidates = [",", ";", "\t"];
+    const sampleLines = String(raw || "")
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#"))
+      .slice(0, 6);
+    if (!sampleLines.length) return ",";
+
+    let bestDelimiter = ",";
+    let bestScore = -1;
+    for (const delimiter of candidates) {
+      const fieldCounts = sampleLines.map((line) => parseCsvLine(line, delimiter).length);
+      const usefulRows = fieldCounts.filter((count) => count > 1).length;
+      const totalFields = fieldCounts.reduce((sum, count) => sum + count, 0);
+      const firstCount = fieldCounts[0] || 0;
+      const score = usefulRows * 1000 + totalFields * 10 + firstCount;
+      if (score > bestScore) {
+        bestScore = score;
+        bestDelimiter = delimiter;
+      }
+    }
+    return bestDelimiter;
+  }
+
   function parseInputTerms(raw) {
+    const delimiter = detectDelimitedTextSeparator(raw);
     const lines = String(raw || "").split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     const results = [];
     for (const line of lines) {
       if (line.startsWith("#")) continue;
-      const fields = parseCsvLine(line);
+      const fields = parseCsvLine(line, delimiter);
       const shortcut = String(fields[0] || "").trim();
       const term = String(fields[1] || "").trim();
       const section_key = String(fields[2] || "").trim().toLowerCase();
@@ -935,6 +1418,268 @@ ${body}
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1200);
+  }
+
+  function compactLibraryCsvHeaders() {
+    return ["shortcut", "term", "section_key", "category", "notes"];
+  }
+
+  function activeCompactLibraryExportRows() {
+    return activeCompactLibraryRows()
+      .filter((row) => row.shortcut && row.term && !row.deleted && !row.hidden)
+      .slice()
+      .sort((a, b) => {
+        const shortcutDiff = String(a.shortcut || "").localeCompare(String(b.shortcut || ""));
+        if (shortcutDiff) return shortcutDiff;
+        return String(a.term || "").localeCompare(String(b.term || ""));
+      });
+  }
+
+  function buildCompactLibraryCsvText() {
+    const headers = compactLibraryCsvHeaders();
+    const lines = [headers.join(",")].concat(
+      activeCompactLibraryExportRows().map((row) => headers.map((key) => csvEscape(row[key] || "")).join(","))
+    );
+    return lines.join("\n");
+  }
+
+  function buildCompactLibraryPlistText() {
+    const body = activeCompactLibraryExportRows().map((row) => `  <dict>
+    <key>phrase</key>
+    <string>${xmlEscape(row.term)}</string>
+    <key>shortcut</key>
+    <string>${xmlEscape(row.shortcut)}</string>
+    <key>section_key</key>
+    <string>${xmlEscape(row.section_key || "")}</string>
+    <key>category</key>
+    <string>${xmlEscape(row.category || "")}</string>
+    <key>notes</key>
+    <string>${xmlEscape(row.notes || "")}</string>
+  </dict>`).join("\n");
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<array>
+${body}
+</array>
+</plist>
+`;
+  }
+
+  function exportCompactLibraryFiles() {
+    downloadText(`myui_compact_terms_${dateStamp()}.csv`, buildCompactLibraryCsvText(), "text/csv;charset=utf-8");
+    setTimeout(() => {
+      downloadText(`myui_compact_terms_${dateStamp()}.plist`, buildCompactLibraryPlistText(), "application/x-plist;charset=utf-8");
+    }, 120);
+    setCompactStatus("Exported the active compact terms library as .csv and .plist.", "success");
+    render();
+    return true;
+  }
+
+  function compactImportFieldMap(headers) {
+    const map = new Map();
+    headers.forEach((header, index) => {
+      const key = normalize(header).replace(/[^a-z0-9]+/g, "_");
+      if (key) map.set(key, index);
+    });
+    return map;
+  }
+
+  function compactImportFieldValue(fields, fieldMap, names) {
+    for (const name of names) {
+      const index = fieldMap.get(name);
+      if (Number.isInteger(index)) return String(fields[index] || "").trim();
+    }
+    return "";
+  }
+
+  function parseCompactLibraryCsv(raw) {
+    const delimiter = detectDelimitedTextSeparator(raw);
+    const lines = String(raw || "").split(/\r?\n/).filter((line) => line.trim());
+    if (!lines.length) throw new Error("CSV file is empty.");
+    const firstFields = parseCsvLine(lines[0], delimiter);
+    const fieldMap = compactImportFieldMap(firstFields);
+    const hasHeader = ["shortcut", "term", "phrase"].some((key) => fieldMap.has(key));
+    const dataLines = hasHeader ? lines.slice(1) : lines;
+    const rows = [];
+    const skipped = [];
+    dataLines.forEach((line, index) => {
+      if (!line.trim() || line.trim().startsWith("#")) return;
+      const fields = parseCsvLine(line, delimiter);
+      const record = hasHeader ? {
+        shortcut: compactImportFieldValue(fields, fieldMap, ["shortcut", "key", "s"]),
+        term: compactImportFieldValue(fields, fieldMap, ["term", "phrase", "text", "p"]),
+        section_key: compactImportFieldValue(fields, fieldMap, ["section_key", "section", "group", "group_key"]),
+        category: compactImportFieldValue(fields, fieldMap, ["category", "category_label", "subcategory", "label"]),
+        notes: compactImportFieldValue(fields, fieldMap, ["notes", "description", "definition", "desc"])
+      } : {
+        shortcut: String(fields[0] || "").trim(),
+        term: String(fields[1] || "").trim(),
+        section_key: String(fields[2] || "").trim(),
+        category: String(fields[3] || "").trim(),
+        notes: String(fields[4] || "").trim()
+      };
+      const row = compactSourceItemToRow(record, index);
+      if (!row) {
+        skipped.push(index + 1 + (hasHeader ? 1 : 0));
+        return;
+      }
+      rows.push(row);
+    });
+    if (!rows.length) throw new Error("No valid import rows were found.");
+    return { rows, skippedCount: skipped.length };
+  }
+
+  function plistNodeValue(node) {
+    if (!node) return "";
+    const name = String(node.tagName || "").toLowerCase();
+    if (name === "true") return true;
+    if (name === "false") return false;
+    return String(node.textContent || "").trim();
+  }
+
+  function parseCompactLibraryPlist(raw) {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(String(raw || ""), "application/xml");
+    if (doc.querySelector("parsererror")) throw new Error("Invalid .plist file.");
+    const dicts = Array.from(doc.querySelectorAll("plist > array > dict"));
+    if (!dicts.length) throw new Error("No import entries were found in the .plist file.");
+    const rows = [];
+    let skippedCount = 0;
+    dicts.forEach((dictNode, index) => {
+      const record = {};
+      let lastKey = "";
+      Array.from(dictNode.children).forEach((child) => {
+        const name = String(child.tagName || "").toLowerCase();
+        if (name === "key") {
+          lastKey = String(child.textContent || "").trim();
+          return;
+        }
+        if (!lastKey) return;
+        record[lastKey] = plistNodeValue(child);
+        lastKey = "";
+      });
+      const row = compactSourceItemToRow(record, index);
+      if (!row) {
+        skippedCount += 1;
+        return;
+      }
+      rows.push(row);
+    });
+    if (!rows.length) throw new Error("No valid import rows were found in the .plist file.");
+    return { rows, skippedCount };
+  }
+
+  function replaceCompactLibraryRows(rows, message) {
+    COMPACT_ACTIVE_ROWS = cloneCompactLibraryRows(rows);
+    CUSTOM_TERM_ENTRIES = [];
+    rebuildRuntimeData();
+    saveCompactData();
+    setCompactStatus(message, "success");
+    render();
+    return true;
+  }
+
+  function compactLibraryIdentityKey(row) {
+    return normalize(row?.term || row?.p || "");
+  }
+
+  function compactLibraryRowsEquivalent(a, b) {
+    const keys = [
+      "shortcut",
+      "term",
+      "section_key",
+      "section_label",
+      "category",
+      "code",
+      "flow_bucket",
+      "function_bucket",
+      "base_shortcut",
+      "suffix",
+      "notes",
+      "order_code",
+      "hidden",
+      "deleted"
+    ];
+    return keys.every((key) => String(a?.[key] ?? "") === String(b?.[key] ?? ""));
+  }
+
+  function reconcileImportedCompactLibraryRows(importedRows) {
+    const currentRows = cloneCompactLibraryRows(activeCompactLibraryRows());
+    const currentByTerm = new Map();
+    currentRows.forEach((row) => {
+      const key = compactLibraryIdentityKey(row);
+      if (key && !currentByTerm.has(key)) currentByTerm.set(key, row);
+    });
+
+    const nextRows = [];
+    const nextIndexByKey = new Map();
+    let updated = 0;
+    let added = 0;
+
+    (importedRows || []).forEach((row, index) => {
+      const normalizedRow = normalizeMasterRow(row, index);
+      const key = compactLibraryIdentityKey(normalizedRow);
+      if (!key) return;
+      const current = currentByTerm.get(key);
+      const nextRow = current
+        ? normalizeMasterRow({ ...normalizedRow, id: current.id || normalizedRow.id }, index)
+        : normalizedRow;
+
+      if (current) {
+        if (!compactLibraryRowsEquivalent(current, nextRow)) updated += 1;
+      } else {
+        added += 1;
+      }
+
+      if (nextIndexByKey.has(key)) {
+        nextRows[nextIndexByKey.get(key)] = nextRow;
+      } else {
+        nextIndexByKey.set(key, nextRows.length);
+        nextRows.push(nextRow);
+      }
+    });
+
+    const removed = currentRows.reduce((count, row) => {
+      const key = compactLibraryIdentityKey(row);
+      return key && !nextIndexByKey.has(key) ? count + 1 : count;
+    }, 0);
+
+    return { rows: nextRows, added, updated, removed };
+  }
+
+  function resetCompactLibraryToDefault() {
+    const confirmed = window.confirm("Reset the compact terms library to the factory default? This will discard the currently active imported or customized library and replace it with the bundled factory default.");
+    if (!confirmed) return false;
+    return replaceCompactLibraryRows(defaultCompactLibraryRows(), "Restored the compact terms library to the factory default.");
+  }
+
+  async function importCompactLibraryFile(file) {
+    if (!file) return false;
+    const name = String(file.name || "").trim();
+    const lowerName = name.toLowerCase();
+    let parsed;
+    try {
+      const raw = await file.text();
+      parsed = lowerName.endsWith(".plist")
+        ? parseCompactLibraryPlist(raw)
+        : parseCompactLibraryCsv(raw);
+    } catch (error) {
+      setCompactStatus(`Import failed: ${error.message || "invalid file"}`, "error");
+      render();
+      return false;
+    }
+    const reconciled = reconcileImportedCompactLibraryRows(parsed.rows);
+    return replaceCompactLibraryRows(
+      reconciled.rows,
+      [
+        "Imported successfully",
+        `${reconciled.updated} updated`,
+        `${reconciled.added} added`,
+        `${reconciled.removed} removed`,
+        parsed.skippedCount ? `${parsed.skippedCount} malformed row${parsed.skippedCount === 1 ? "" : "s"} skipped` : ""
+      ].filter(Boolean).join(" · ")
+    );
   }
 
   function editorSections() {
@@ -1281,6 +2026,7 @@ ${body}
   function activeCategoryRoute(term) {
     if (!term) return null;
     if (term.sec === "instruments") return "instruments";
+    if (term.sec === "vibe") return "vibes";
     const label = normalize(displayCategory(term.cat));
     const sec = String(term.sec || "");
     if (sec === "feel") return "vibes";
@@ -1402,12 +2148,23 @@ ${body}
   }
 
 
-  function composerInputSnapshot() {
+  function composerInputSnapshot(options = {}) {
     const active = shadow?.activeElement;
     const el = active?.id === "bp-compact-compose"
       ? shadow?.getElementById("bp-compact-compose")
       : shadow?.getElementById("bp-composer-text");
-    if (!el || active !== el) return null;
+    if (!el || active !== el) {
+      if (!options.consumeQueued) return null;
+      if (_queuedComposerRestoreSnapshot && Date.now() <= _queuedComposerRestoreUntil) {
+        const snapshot = _queuedComposerRestoreSnapshot;
+        _queuedComposerRestoreSnapshot = null;
+        _queuedComposerRestoreUntil = 0;
+        return snapshot;
+      }
+      _queuedComposerRestoreSnapshot = null;
+      _queuedComposerRestoreUntil = 0;
+      return null;
+    }
     const value = String(el.value || "");
     const start = Number.isFinite(el.selectionStart) ? el.selectionStart : value.length;
     const end = Number.isFinite(el.selectionEnd) ? el.selectionEnd : start;
@@ -1417,6 +2174,13 @@ ${body}
       startFromEnd: Math.max(0, value.length - start),
       endFromEnd: Math.max(0, value.length - end)
     };
+  }
+
+  function queueComposerRestoreSnapshot(snapshot = composerInputSnapshot()) {
+    if (!snapshot?.focused || !snapshot?.id) return false;
+    _queuedComposerRestoreSnapshot = snapshot;
+    _queuedComposerRestoreUntil = Date.now() + 800;
+    return true;
   }
 
   function restoreComposerInput(snapshot, options = {}) {
@@ -1468,8 +2232,9 @@ ${body}
         range.collapse(true);
       }
       if (range) {
-        armedFieldSelection = { kind: "range", range };
-        return armedFieldSelection;
+        const snapshot = { kind: "range", range };
+        setStoredArmedFieldSelection(snapshot);
+        return snapshot;
       }
     }
     return snapshotArmedFieldSelection(field);
@@ -1492,59 +2257,63 @@ ${body}
   function resolveEditableField(node) {
     let el = node;
     while (el && el !== document.documentElement && el !== document.body) {
-      if (host?.contains(el)) return null;
+      if (host?.contains(el) || isMyuiShadowNode(el)) return null;
       if (isEditableNode(el)) return el;
       el = el.parentElement || el.parentNode;
     }
-    return isEditableNode(el) && !host?.contains(el) ? el : null;
+    return isEditableNode(el) && !host?.contains(el) && !isMyuiShadowNode(el) ? el : null;
   }
 
 
   function clearArmedField(field = null) {
-    if (!field || lastFocusedField === field) lastFocusedField = null;
-    armedFieldSelection = null;
+    const activeField = getStoredArmedField();
+    if (!field || activeField === field) setStoredArmedField(null);
+    clearStoredArmedFieldSelection();
   }
 
   function armWriteField(field, options = {}) {
     if (!field) return false;
-    const changed = lastFocusedField !== field;
-    lastFocusedField = field;
+    const changed = getStoredArmedField() !== field;
+    setStoredArmedField(field);
     if (options.captureNow) snapshotArmedFieldSelection(field);
     return changed;
   }
 
   function snapshotArmedFieldSelection(field = currentWriteField()) {
     if (!field) {
-      armedFieldSelection = null;
+      clearStoredArmedFieldSelection();
       return null;
     }
     if (field.tagName === "INPUT" || field.tagName === "TEXTAREA") {
       const value = String(field.value || "");
       const start = Number.isFinite(field.selectionStart) ? field.selectionStart : value.length;
       const end = Number.isFinite(field.selectionEnd) ? field.selectionEnd : start;
-      armedFieldSelection = { kind: "text", start, end };
-      return armedFieldSelection;
+      const snapshot = { kind: "text", start, end };
+      setStoredArmedFieldSelection(snapshot);
+      return snapshot;
     }
     if (field.isContentEditable || field.getAttribute?.("contenteditable") === "true" || field.getAttribute?.("role") === "textbox") {
       const selection = window.getSelection?.();
       if (selection?.rangeCount) {
         const range = selection.getRangeAt(0);
         if (field.contains(range.startContainer) && field.contains(range.endContainer)) {
-          armedFieldSelection = { kind: "range", range: range.cloneRange() };
-          return armedFieldSelection;
+          const snapshot = { kind: "range", range: range.cloneRange() };
+          setStoredArmedFieldSelection(snapshot);
+          return snapshot;
         }
       }
-      armedFieldSelection = { kind: "range", range: null };
-      return armedFieldSelection;
+      const snapshot = { kind: "range", range: null };
+      setStoredArmedFieldSelection(snapshot);
+      return snapshot;
     }
-    armedFieldSelection = null;
+    clearStoredArmedFieldSelection();
     return null;
   }
 
   function restoreArmedFieldSelection(field = currentWriteField()) {
     if (!field) return false;
     field.focus?.({ preventScroll: true });
-    const snapshot = armedFieldSelection;
+    const snapshot = getStoredArmedFieldSelection();
     if (field.tagName === "INPUT" || field.tagName === "TEXTAREA") {
       const value = String(field.value || "");
       const start = clamp(Number.isFinite(snapshot?.start) ? snapshot.start : value.length, 0, value.length);
@@ -1567,7 +2336,7 @@ ${body}
         fallback.collapse(false);
         selection.removeAllRanges();
         selection.addRange(fallback);
-        armedFieldSelection = { kind: "range", range: fallback.cloneRange() };
+        setStoredArmedFieldSelection({ kind: "range", range: fallback.cloneRange() });
         return true;
       }
     }
@@ -1617,10 +2386,42 @@ ${body}
     state.sessionOpen = true;
   }
 
+  function upsertToolStateTerm(sec, term) {
+    if (!term) return false;
+    const text = activeInsertText(term, sec);
+    if (!text) return false;
+    const list = getToolList(sec);
+    const existing = list.findIndex((item) => toolItemText(item) === text);
+    if (existing !== -1) {
+      list[existing].display = String(term?.s || text).trim();
+      list[existing].label = text;
+      list[existing].active = true;
+      state.selectedToolIndex = existing;
+    } else {
+      list.push({ text, display: String(term?.s || text).trim(), label: text, active: true });
+      state.selectedToolIndex = list.length - 1;
+    }
+    state.selectedToolSec = sec;
+    ensureToolTrayOpen(sec);
+    return true;
+  }
+
+  function addTermToToolState(sec, term) {
+    const updated = upsertToolStateTerm(sec, term);
+    if (!updated) return false;
+    addTermToSession(term);
+    queuePrefsSave();
+    return updated;
+  }
+
   function sessionTermAt(index) {
     const item = state.sessionItems[index];
     if (!item) return null;
     return TERM_MAP.get(item.key) || null;
+  }
+
+  function termByKey(key) {
+    return TERM_MAP.get(key) || null;
   }
 
   function writeSessionItem(index, event) {
@@ -1958,13 +2759,38 @@ ${body}
     return pool.filter(matchesQuery);
   }
 
+  function compactProductionishTerm(term) {
+    if (!term) return false;
+    if (term.sec === "production" || term.sec === "mix") return true;
+    const haystack = normalize([
+      term.sec,
+      term.sectionLabel,
+      term.cat,
+      term.flowBucket,
+      term.functionBucket,
+      term.notes
+    ].filter(Boolean).join(" "));
+    return /production|record|recording|mix|master|mastering|effect|effects|fx|reverb|delay|compress|compression|eq|stereo|spatial|processing/.test(haystack);
+  }
+
   function compactGroupMatches(groupKey, term) {
     if (!term) return false;
     if (groupKey === "instruments") return term.sec === "instruments";
-    if (groupKey === "feel") return term.sec === "feel";
-    if (groupKey === "texture") return term.sec === "sound";
-    if (groupKey === "arrangement") return term.sec === "form" || term.functionBucket === "Arrangement";
+    if (groupKey === "feel") return term.sec === "vibe";
+    if (groupKey === "texture") return (term.sec === "texture" || term.sec === "sound") && !compactProductionishTerm(term);
+    if (groupKey === "arrangement") return term.sec === "arrangement" || term.sec === "form" || term.functionBucket === "Arrangement";
+    if (groupKey === "production") return compactProductionishTerm(term);
     return false;
+  }
+
+  function duplicateCompactShortcuts(rows) {
+    const counts = new Map();
+    (rows || []).forEach((row) => {
+      const shortcut = String(row?.shortcut || "").trim();
+      if (!shortcut) return;
+      counts.set(shortcut, (counts.get(shortcut) || 0) + 1);
+    });
+    return Array.from(counts.entries()).filter(([, count]) => count > 1).map(([shortcut]) => shortcut);
   }
 
   function compactTermSearchScore(term, query) {
@@ -2155,20 +2981,21 @@ ${body}
   }
 
   function currentWriteField() {
-    if (!lastFocusedField) return null;
-    if (!document.contains(lastFocusedField)) {
-      clearArmedField(lastFocusedField);
+    const field = getStoredArmedField();
+    if (!field) return null;
+    if (!document.contains(field)) {
+      clearArmedField(field);
       return null;
     }
-    if (host?.contains(lastFocusedField)) {
-      clearArmedField(lastFocusedField);
+    if (host?.contains(field) || isMyuiShadowNode(field)) {
+      clearArmedField(field);
       return null;
     }
-    if (!isEditableNode(lastFocusedField)) {
-      clearArmedField(lastFocusedField);
+    if (!isEditableNode(field)) {
+      clearArmedField(field);
       return null;
     }
-    return lastFocusedField;
+    return field;
   }
 
   function currentWriteState() {
@@ -2191,13 +3018,13 @@ ${body}
     if (!clean) return false;
     const target = publishTarget();
     if (target === "compose-local") {
-      if (!state.writeMode) {
-        state.editorMessage = "Live off — Quick-Tag Compose publish paused";
-        return false;
-      }
       if (isCompactQuickTagMode()) {
         appendCompactComposeText(clean);
         return true;
+      }
+      if (!state.writeMode) {
+        state.editorMessage = "Live off — Quick-Tag Compose publish paused";
+        return false;
       }
       insertAtComposerCursor(clean + " ", type || "term");
       return true;
@@ -2333,8 +3160,7 @@ ${body}
     } else if (!state.query) {
       state.searchCategoryFilter = "";
     }
-    clearTimeout(_savePrefsTimer);
-    _savePrefsTimer = setTimeout(savePrefs, 300);
+    queuePrefsSave(300);
     render();
   }
 
@@ -2902,7 +3728,7 @@ ${body}
   }
 
   function isCompactQuickTagMode() {
-    return state.quickTagMode === "compact";
+    return ACTIVE_RENDER_BIND_PATH === "compact-only" || state.quickTagMode === "compact";
   }
 
   function setCompactStatus(message, kind = "info") {
@@ -2913,6 +3739,295 @@ ${body}
   function clearCompactStatus() {
     state.compactStatusMessage = "";
     state.compactStatusKind = "info";
+  }
+
+  function compactComposeHasMeaningfulText(text = state.compactComposeText) {
+    return !!String(text || "").trim();
+  }
+
+  function compactShouldCapitalizeSegmentStart(previousText) {
+    const prior = String(previousText || "").replace(/\s+$/, "");
+    if (!prior) return true;
+    return /[.!?]$/.test(prior);
+  }
+
+  function compactShouldPreserveLeadingUppercaseWord(word) {
+    const text = String(word || "");
+    if (!text) return false;
+    if (/^I(?:['’].+)?$/.test(text)) return true;
+    if (/^[A-Z0-9]+(?:[-/][A-Z0-9]+)*$/.test(text) && /[A-Z]/.test(text)) return true;
+    return false;
+  }
+
+  function applyCompactLeadingSentenceCase(text, capitalizeStart = true) {
+    const source = String(text || "");
+    const match = /^([^A-Za-z]*)([A-Za-z][A-Za-z0-9'’-]*)/.exec(source);
+    if (!match) return source;
+    const prefix = match[1];
+    const word = match[2];
+    let nextWord = word;
+    if (capitalizeStart) {
+      nextWord = word.charAt(0).toUpperCase() + word.slice(1);
+    } else if (!compactShouldPreserveLeadingUppercaseWord(word)) {
+      nextWord = word.charAt(0).toLowerCase() + word.slice(1);
+    }
+    return `${prefix}${nextWord}${source.slice(prefix.length + word.length)}`;
+  }
+
+  function capitalizeCompactOutputSentences(text, options = {}) {
+    const source = String(text || "");
+    if (!source) return "";
+    const capitalizeStart = options.capitalizeStart !== false;
+    const withLeadingCase = applyCompactLeadingSentenceCase(source, capitalizeStart);
+    return withLeadingCase.replace(/([.!?]\s+)([a-z])/g, (_, prefix, char) => `${prefix}${char.toUpperCase()}`);
+  }
+
+  function normalizeCompactOutputText(text, options = {}) {
+    const capitalizeStart = options.capitalizeStart !== false;
+    let normalizedText = String(text || "").replace(/\r\n?/g, "\n");
+    if (!normalizedText.trim()) return "";
+
+    normalizedText = normalizedText
+      .replace(/\b(?:p\s*d|pd)\b/gi, " . ")
+      .replace(/\bcomma\b/gi, " , ");
+
+    normalizedText = normalizedText
+      .replace(/\s+/g, " ")
+      .replace(/\s+([.,])/g, "$1")
+      .replace(/([.,])(?:\s*[.,])+/g, "$1")
+      .replace(/([.,])\s*/g, "$1 ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+
+    normalizedText = capitalizeCompactOutputSentences(normalizedText, { capitalizeStart });
+    return normalizedText;
+  }
+
+  function extractCompactMicStopCommand(text) {
+    const raw = String(text || "").replace(/\s+/g, " ").trim();
+    if (!raw) return { command: "", text: "" };
+    const commands = [
+      { command: "site", regex: /(?:^|[\s.,;:!?])(?:p\s*t\s*s|pts)\s*$/i },
+      { command: "app", regex: /(?:^|[\s.,;:!?])(?:p\s*t\s*a|pta)\s*$/i }
+    ];
+    for (const entry of commands) {
+      const match = entry.regex.exec(raw);
+      if (!match) continue;
+      return {
+        command: entry.command,
+        text: raw.slice(0, match.index).trim()
+      };
+    }
+    return { command: "", text: raw };
+  }
+
+  function clearCompactMicStopCommand() {
+    _pendingCompactMicStopCommand = null;
+  }
+
+  function clearCompactMicStopCommandTimer() {
+    if (_compactMicStopCommandTimer) clearTimeout(_compactMicStopCommandTimer);
+    _compactMicStopCommandTimer = null;
+  }
+
+  function cancelCompactMicStopCommand() {
+    clearCompactMicStopCommandTimer();
+    _pendingCompactMicStopCommand = null;
+    _compactMicStopRequested = false;
+  }
+
+  function shouldExecuteCompactMicStopCommand() {
+    return !!_pendingCompactMicStopCommand?.command && (_compactMicStopRequested || !state.compactDictationActive);
+  }
+
+  function scheduleCompactMicStopCommandExecution(delay = 240) {
+    clearCompactMicStopCommandTimer();
+    _compactMicStopCommandTimer = setTimeout(() => {
+      _compactMicStopCommandTimer = null;
+      if (!shouldExecuteCompactMicStopCommand()) return;
+      executeCompactMicStopCommand();
+      render();
+    }, delay);
+  }
+
+  function normalizeCompactComposeOutputInPlace(text = state.compactComposeText) {
+    const normalizedText = normalizeCompactOutputText(text);
+    setCompactComposeText(normalizedText);
+    return normalizedText;
+  }
+
+  function appendCompactDictationFinalText(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return false;
+    const pending = extractCompactMicStopCommand(raw);
+    const beforeText = String(state.compactComposeText || "");
+    const normalizedSegment = normalizeCompactOutputText(pending.text, {
+      capitalizeStart: compactShouldCapitalizeSegmentStart(beforeText)
+    });
+    if (normalizedSegment && !appendCompactComposeText(normalizedSegment, { preserveMicStopCommand: true })) return false;
+    _pendingCompactMicStopCommand = pending.command ? { command: pending.command } : null;
+    return true;
+  }
+
+  function executeCompactMicStopCommand() {
+    clearCompactMicStopCommandTimer();
+    const pending = _pendingCompactMicStopCommand;
+    _pendingCompactMicStopCommand = null;
+    _compactMicStopRequested = false;
+    if (!pending?.command) return false;
+
+    if (pending.command === "site") {
+      performCompactAppPrint();
+      performCompactPrint();
+      return true;
+    }
+    performCompactAppPrint();
+    return true;
+  }
+
+  function openCompactSitePrintPrompt(text = state.compactComposeText) {
+    const clean = String(text || "").trim();
+    if (!clean) {
+      state.compactSitePrintPromptOpen = false;
+      state.compactSitePrintPromptText = "";
+      return false;
+    }
+    state.compactSitePrintPromptOpen = true;
+    state.compactSitePrintPromptText = clean;
+    return true;
+  }
+
+  function closeCompactSitePrintPrompt() {
+    state.compactSitePrintPromptOpen = false;
+    state.compactSitePrintPromptText = "";
+  }
+
+  function enterCompactQuickTagMode() {
+    state.quickTagMode = "compact";
+    state.visible = false;
+    state.sessionOpen = true;
+    state.sessionMinimized = false;
+    state.compactTermsOpen = true;
+    state.compactTermsMinimized = false;
+    state.compactTagsOpen = true;
+    state.compactTagsMinimized = false;
+    state.quickComposePinned = true;
+    state.listenMode = "word";
+    state.sessionWidth = Math.max(state.sessionWidth || 0, 380);
+    state.sessionHeight = Math.max(state.sessionHeight || 0, 560);
+    state.compactTermsWidth = Math.max(state.compactTermsWidth || 0, 380);
+    state.compactTermsHeight = Math.max(state.compactTermsHeight || 0, 520);
+    state.compactTagsWidth = Math.max(state.compactTagsWidth || 0, 320);
+    state.compactTagsHeight = Math.max(state.compactTagsHeight || 0, 420);
+    state.compactPrintsWidth = Math.max(state.compactPrintsWidth || 0, 340);
+    state.compactPrintsHeight = Math.max(state.compactPrintsHeight || 0, 260);
+    state.compactPhrasesWidth = Math.max(state.compactPhrasesWidth || 0, 340);
+    state.compactPhrasesHeight = Math.max(state.compactPhrasesHeight || 0, 260);
+    state.compactSessionTermsWidth = Math.max(state.compactSessionTermsWidth || 0, 320);
+    state.compactSessionTermsHeight = Math.max(state.compactSessionTermsHeight || 0, 420);
+    setToolTrayOpen("instruments", true);
+    setToolTrayOpen("vibes", true);
+  }
+
+  function enterLegacyQuickTagMode() {
+    if (ACTIVE_RENDER_BIND_PATH === "compact-only") {
+      enterCompactQuickTagMode();
+      return;
+    }
+    state.quickTagMode = "legacy";
+    state.visible = true;
+    state.compactTermsOpen = false;
+    state.compactTagsOpen = false;
+    state.sessionOpen = true;
+    state.sessionMinimized = false;
+  }
+
+  function clearCompactSessionData() {
+    clearSessionWorkingState({ closeSessionUi: false, closeComposerUi: false, closeToolTrays: false });
+    state.sessionOpen = true;
+    state.compactTermsOpen = true;
+    state.compactTagsOpen = true;
+    closeCompactSitePrintPrompt();
+    setCompactStatus("Cleared compose and tagger session content.", "info");
+    savePrefs();
+    render();
+    return true;
+  }
+
+  function clearCompactSessionTerms() {
+    if (!(state.sessionItems || []).length) {
+      setCompactStatus("Session Terms is already empty.", "info");
+      render();
+      return false;
+    }
+    state.sessionItems = [];
+    state.sessionPage = 0;
+    state.quickTermsDeleteMode = false;
+    state.quickTermsDeleteTarget = null;
+    state.quickTermsHotkeyOffset = 0;
+    if (state.quickMoveMode === "terms") {
+      state.quickMoveMode = null;
+      state.quickMovePillIdx = null;
+    }
+    setCompactStatus("Cleared current session terms.", "info");
+    queuePrefsSave();
+    render();
+    return true;
+  }
+
+  function deleteCompactSessionTerm(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= (state.sessionItems || []).length) return false;
+    const item = state.sessionItems[index];
+    state.sessionItems = state.sessionItems.filter((_, itemIndex) => itemIndex !== index);
+    state.sessionPage = 0;
+    state.quickTermsDeleteTarget = null;
+    if (state.quickMoveMode === "terms") {
+      state.quickMoveMode = null;
+      state.quickMovePillIdx = null;
+    }
+    setCompactStatus(`Removed "${item?.text || item?.shortcut || "session term"}" from Session Terms.`, "info");
+    queuePrefsSave();
+    render();
+    return true;
+  }
+
+  function deleteCompactHistoryEntry(entryId) {
+    const before = state.compactPrintHistory.length;
+    state.compactPrintHistory = (state.compactPrintHistory || []).filter((entry) => entry.id !== entryId);
+    if (state.compactPrintHistory.length === before) return false;
+    saveCompactData();
+    setCompactStatus("Removed item from Full Prints / History.", "info");
+    render();
+    return true;
+  }
+
+  function deleteCompactPhraseEntry(entryId) {
+    const beforeSentences = state.compactPhraseBank.length;
+    state.compactPhraseBank = (state.compactPhraseBank || []).filter((entry) => entry.id !== entryId);
+    if (state.compactPhraseBank.length !== beforeSentences) {
+      saveCompactData();
+      setCompactStatus("Removed sentence from Sentences.", "info");
+      render();
+      return true;
+    }
+    const beforeManual = (state.compactManualPhraseBank || []).length;
+    state.compactManualPhraseBank = (state.compactManualPhraseBank || []).filter((entry) => entry.id !== entryId);
+    if (state.compactManualPhraseBank.length === beforeManual) return false;
+    saveCompactData();
+    setCompactStatus("Removed phrase from manual Phrases.", "info");
+    render();
+    return true;
+  }
+
+  function deleteCompactUndefinedEntry(index) {
+    if (!Number.isInteger(index) || index < 0 || index >= (state.undefinedTerms || []).length) return false;
+    const entry = state.undefinedTerms[index];
+    state.undefinedTerms = state.undefinedTerms.filter((_, itemIndex) => itemIndex !== index);
+    removeUndefinedSessionItem(entry);
+    saveCompactData();
+    setCompactStatus("Removed undefined term.", "info");
+    render();
+    return true;
   }
 
   function sanitizeCompactCustomTerms(items) {
@@ -2988,18 +4103,40 @@ ${body}
       .filter(Boolean);
   }
 
+  function sanitizeCompactManualPhraseBank(items) {
+    return sanitizeCompactPhraseBank(items);
+  }
+
   async function loadCompactSourceRows() {
     COMPACT_SOURCE_ROWS = [];
     try {
-      const url = chrome?.runtime?.getURL?.(COMPACT_SOURCE_FILE);
-      if (!url) return;
+      const url = assetUrl(COMPACT_SOURCE_FILE);
+      if (!url) {
+        console.warn(`[MYUI] Failed to resolve compact source URL for ${COMPACT_SOURCE_FILE}.`);
+        return;
+      }
       const response = await fetch(url);
-      if (!response.ok) return;
-      const payload = await response.json();
-      COMPACT_SOURCE_ROWS = flattenCompactSourcePayload(payload)
-        .map((item, index) => compactSourceItemToRow(item, index))
-        .filter(Boolean);
-    } catch (_) {
+      if (!response.ok) {
+        console.warn(`[MYUI] Failed to load compact source (${response.status}).`, url);
+        return;
+      }
+      const lowerName = String(COMPACT_SOURCE_FILE || "").toLowerCase();
+      if (lowerName.endsWith(".csv")) {
+        const raw = await response.text();
+        const parsed = parseCompactLibraryCsv(raw);
+        COMPACT_SOURCE_ROWS = cloneCompactLibraryRows(parsed.rows);
+      } else {
+        const payload = await response.json();
+        COMPACT_SOURCE_ROWS = flattenCompactSourcePayload(payload)
+          .map((item, index) => compactSourceItemToRow(item, index))
+          .filter(Boolean);
+      }
+      const duplicateShortcuts = duplicateCompactShortcuts(COMPACT_SOURCE_ROWS);
+      if (duplicateShortcuts.length) {
+        console.warn("[MYUI] Duplicate shortcuts remain in the bundled compact source after resolution.", duplicateShortcuts);
+      }
+    } catch (error) {
+      console.warn(`[MYUI] Failed to load compact source ${COMPACT_SOURCE_FILE}.`, error);
       COMPACT_SOURCE_ROWS = [];
     }
   }
@@ -3007,9 +4144,12 @@ ${body}
   async function loadCompactData() {
     const area = chrome?.storage?.local;
     if (!area) {
+      COMPACT_ACTIVE_ROWS = [];
+      LEGACY_COMPACT_CUSTOM_ENTRIES = [];
       CUSTOM_TERM_ENTRIES = [];
       state.compactPrintHistory = [];
       state.compactPhraseBank = [];
+      state.compactManualPhraseBank = [];
       return;
     }
     try {
@@ -3022,15 +4162,21 @@ ${body}
         }
       });
       const payload = stored?.[COMPACT_STORAGE_KEY] || {};
-      CUSTOM_TERM_ENTRIES = sanitizeCompactCustomTerms(payload.customTerms);
+      COMPACT_ACTIVE_ROWS = restoreStoredCompactLibraryRows(payload.activeLibraryRows);
+      LEGACY_COMPACT_CUSTOM_ENTRIES = sanitizeCompactCustomTerms(payload.customTerms);
+      CUSTOM_TERM_ENTRIES = [];
       state.compactPrintHistory = sanitizeCompactPrintHistory(payload.fullPrintHistory || payload.printHistory);
       state.compactPhraseBank = sanitizeCompactPhraseBank(payload.phraseBank);
+      state.compactManualPhraseBank = sanitizeCompactManualPhraseBank(payload.manualPhraseBank);
       const storedUndefined = sanitizeCompactUndefinedTerms(payload.undefinedTerms);
       if (storedUndefined.length) state.undefinedTerms = storedUndefined;
     } catch (_) {
+      COMPACT_ACTIVE_ROWS = [];
+      LEGACY_COMPACT_CUSTOM_ENTRIES = [];
       CUSTOM_TERM_ENTRIES = [];
       state.compactPrintHistory = [];
       state.compactPhraseBank = [];
+      state.compactManualPhraseBank = [];
     }
   }
 
@@ -3039,9 +4185,11 @@ ${body}
     if (!area) return;
     const payload = {
       [COMPACT_STORAGE_KEY]: {
-        customTerms: CUSTOM_TERM_ENTRIES,
+        activeLibraryRows: cloneCompactLibraryRows(activeCompactLibraryRows()),
+        customTerms: [],
         fullPrintHistory: sanitizeCompactPrintHistory(state.compactPrintHistory),
         phraseBank: sanitizeCompactPhraseBank(state.compactPhraseBank),
+        manualPhraseBank: sanitizeCompactManualPhraseBank(state.compactManualPhraseBank),
         undefinedTerms: sanitizeCompactUndefinedTerms(state.undefinedTerms)
       }
     };
@@ -3051,19 +4199,63 @@ ${body}
     } catch (_) {}
   }
 
-  function appendCompactComposeText(text) {
+  function finalizeCompactLibraryState() {
+    if (!COMPACT_ACTIVE_ROWS.length && LEGACY_COMPACT_CUSTOM_ENTRIES.length) {
+      const migratedRows = defaultCompactLibraryRows().concat(
+        LEGACY_COMPACT_CUSTOM_ENTRIES.map((entry, index) => compactCustomTermToRow(entry, index))
+      );
+      COMPACT_ACTIVE_ROWS = cloneCompactLibraryRows(migratedRows);
+    }
+    LEGACY_COMPACT_CUSTOM_ENTRIES = [];
+    CUSTOM_TERM_ENTRIES = [];
+  }
+
+  function appendCompactComposeText(text, options = {}) {
+    const { preserveMicStopCommand = false } = options || {};
     const clean = String(text || "").trim();
     if (!clean) return false;
+    if (preserveMicStopCommand) clearCompactMicStopCommand();
+    else cancelCompactMicStopCommand();
     const current = String(state.compactComposeText || "");
-    const needsLeadingSpace = !!current && !/[\s([{/.,;:!?-]$/.test(current);
+    const needsLeadingSpace = !!current && !/[\s([{/]$/.test(current) && !/^[.,;:!?)}\]]/.test(clean);
     state.compactComposeText = `${current}${needsLeadingSpace ? " " : ""}${clean}`.trim();
     state.compactInterimTranscript = "";
+    closeCompactSitePrintPrompt();
     return true;
   }
 
   function setCompactComposeText(text) {
+    cancelCompactMicStopCommand();
     state.compactComposeText = String(text || "").trim();
     state.compactInterimTranscript = "";
+    closeCompactSitePrintPrompt();
+  }
+
+  function compactUndefinedCandidateToken(token) {
+    const clean = String(token || "")
+      .trim()
+      .toLowerCase()
+      .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, "");
+    if (!clean) return "";
+    if (!/^[a-z0-9][a-z0-9'-]*$/.test(clean)) return "";
+    return clean;
+  }
+
+  function compactKnownWordSet() {
+    const known = new Set();
+    [...getConnectives(), ...state.listenConnectives].forEach((entry) => {
+      const token = compactUndefinedCandidateToken(entry);
+      if (token) known.add(token);
+    });
+    const sourceTerms = COMPACT_TERMS.length ? COMPACT_TERMS : TERMS;
+    sourceTerms.forEach((term) => {
+      if (!term?.p || term?.sec === "connect") return;
+      String(term.p || "").split(/\s+/).forEach((part) => {
+        const token = compactUndefinedCandidateToken(part);
+        if (token) known.add(token);
+      });
+    });
+    return known;
   }
 
   function collectCompactUndefinedTerms(text = state.compactComposeText) {
@@ -3072,20 +4264,29 @@ ${body}
       termList: COMPACT_TERMS.length ? COMPACT_TERMS : TERMS
     });
     if (!parsed?.pills?.length) return false;
-    const knownConnectives = new Set([...getConnectives(), ...state.listenConnectives].map(normalize));
+    const knownWords = compactKnownWordSet();
+    const seen = new Set(
+      (state.undefinedTerms || [])
+        .map((entry) => compactUndefinedCandidateToken(undefinedTermText(entry)))
+        .filter(Boolean)
+    );
+    const collected = [];
     let didChange = false;
     parsed.pills.forEach((pill) => {
       if (!pill || pill.type !== "undefined") return;
-      const raw = String(pill.text || "").trim();
-      const norm = normalize(raw);
-      if (!norm || knownConnectives.has(norm)) return;
-      if (!state.undefinedTerms.some((entry) => normalize(undefinedTermText(entry)) === norm)) {
-        state.undefinedTerms = [raw, ...state.undefinedTerms].slice(0, 200);
+      const words = String(pill.text || "").match(/[A-Za-z0-9][A-Za-z0-9'-]*/g) || [];
+      words.forEach((word) => {
+        const norm = compactUndefinedCandidateToken(word);
+        if (!norm) return;
+        if (knownWords.has(norm) || COMPACT_UNDEFINED_STOP_WORDS.has(norm) || seen.has(norm)) return;
+        seen.add(norm);
+        collected.push(norm);
         didChange = true;
-      }
+      });
     });
     if (didChange) {
-      savePrefs();
+      state.undefinedTerms = [...collected, ...state.undefinedTerms].slice(0, 200);
+      collected.forEach((word) => upsertUndefinedSessionItem(word));
       saveCompactData();
     }
     return didChange;
@@ -3094,10 +4295,7 @@ ${body}
   function compactShortcutCollision(shortcut) {
     const target = normalize(shortcut);
     if (!target) return null;
-    const compactRows = compactRuntimeRows();
-    return compactRows.find((row) => normalize(row.shortcut) === target)
-      || activeMasterRows().find((row) => normalize(row.shortcut) === target)
-      || null;
+    return compactRuntimeRows().find((row) => normalize(row.shortcut) === target) || null;
   }
 
   function saveCompactCustomTerm() {
@@ -3115,32 +4313,29 @@ ${body}
       render();
       return false;
     }
-    const duplicateTerm = compactRuntimeRows().find((row) => normalize(row.term) === normalize(term))
-      || activeMasterRows().find((row) => normalize(row.term) === normalize(term));
+    const duplicateTerm = compactRuntimeRows().find((row) => normalize(row.term) === normalize(term));
     if (duplicateTerm) {
       setCompactStatus(`"${term}" already exists in the runtime term set.`, "error");
       render();
       return false;
     }
-    CUSTOM_TERM_ENTRIES = [
-      {
-        id: `compact::${Date.now()}::${Math.random().toString(36).slice(2, 8)}`,
-        term,
-        shortcut,
-        groupKey: group.key,
-        createdAt: Date.now(),
-        notes: `Custom compact term · ${group.label}`
-      },
-      ...CUSTOM_TERM_ENTRIES
-    ];
+    const nextEntry = compactCustomTermToRow({
+      id: `compact::${Date.now()}::${Math.random().toString(36).slice(2, 8)}`,
+      term,
+      shortcut,
+      groupKey: group.key,
+      createdAt: Date.now(),
+      notes: `Custom compact term · ${group.label}`
+    }, 0);
+    COMPACT_ACTIVE_ROWS = [nextEntry, ...materializeActiveCompactLibraryRows()];
     const norm = normalize(term);
     state.undefinedTerms = (state.undefinedTerms || []).filter((entry) => normalize(undefinedTermText(entry)) !== norm);
+    removeUndefinedSessionItem(term);
     state.compactCustomTermText = "";
     state.compactCustomTermShortcut = "";
     state.compactCustomTermGroup = group.key;
     rebuildRuntimeData();
     saveCompactData();
-    savePrefs();
     setCompactStatus(`Saved "${term}" to ${group.label}.`, "success");
     render();
     return true;
@@ -3151,15 +4346,53 @@ ${body}
     const nextShortcut = typeof source === "object" ? undefinedTermShortcut(source).trim() : "";
     if (!nextText) return false;
     state.compactCustomTermText = nextText;
+    state.compactCustomTermShortcut = nextShortcut;
     state.compactCustomTermGroup = compactGroupConfig(groupKey).key;
-    if (nextShortcut) state.compactCustomTermShortcut = nextShortcut;
+    state.compactTermsOpen = true;
+    state.compactTermsMinimized = false;
     setCompactStatus(`Custom term form loaded for "${nextText}".`, "info");
     render();
     return true;
   }
 
+  function captureCompactComposeOutput(text) {
+    const clean = String(text || "").trim();
+    if (!clean) return { text: "", harvestedTerms: [] };
+    collectCompactUndefinedTerms(clean);
+    recordCompactPrint(clean);
+    const harvestedTerms = harvestCompactKnownTermsFromText(clean);
+    state.compactInterimTranscript = "";
+    return { text: clean, harvestedTerms };
+  }
+
   function compactPhraseKey(text) {
-    return normalize(text).replace(/\s+/g, " ").replace(/[.!?]+$/g, "").trim();
+    return String(text || "").replace(/\s+/g, " ").trim();
+  }
+
+  function addCompactManualPhrase(text = state.compactManualPhraseText) {
+    const clean = compactPhraseKey(text);
+    if (!clean) {
+      setCompactStatus("Type a phrase before adding it.", "error");
+      render();
+      return false;
+    }
+    const exists = (state.compactManualPhraseBank || []).some((entry) => compactPhraseKey(entry?.text) === clean);
+    if (exists) {
+      setCompactStatus(`"${clean}" is already in manual Phrases.`, "info");
+      render();
+      return false;
+    }
+    state.compactManualPhraseBank = [{
+      id: `compact-manual-phrase::${Date.now()}::${Math.random().toString(36).slice(2, 6)}`,
+      text: clean,
+      sourcePrintId: "",
+      capturedAt: Date.now()
+    }, ...(state.compactManualPhraseBank || [])].slice(0, COMPACT_PHRASE_LIMIT);
+    state.compactManualPhraseText = "";
+    saveCompactData();
+    setCompactStatus(`Added "${clean}" to manual Phrases.`, "success");
+    render();
+    return true;
   }
 
   function extractCompactPhrasesFromPrint(text, sourcePrintId = "") {
@@ -3188,22 +4421,95 @@ ${body}
   function recordCompactPrint(text) {
     const clean = String(text || "").trim();
     if (!clean) return;
-    const entry = {
+    const existingPrintEntry = (state.compactPrintHistory || []).find((item) => String(item?.text || "").trim() === clean);
+    const entry = existingPrintEntry || {
       id: `compact-print::${Date.now()}::${Math.random().toString(36).slice(2, 8)}`,
       text: clean,
       printedAt: Date.now()
     };
-    state.compactPrintHistory = [
-      entry,
-      ...(state.compactPrintHistory || []).filter((item) => normalize(item?.text) !== normalize(clean))
-    ].slice(0, COMPACT_HISTORY_LIMIT);
-    const phraseEntries = extractCompactPhrasesFromPrint(clean, entry.id);
-    const phraseKeys = new Set(phraseEntries.map((item) => compactPhraseKey(item.text)));
-    state.compactPhraseBank = [
-      ...phraseEntries,
-      ...(state.compactPhraseBank || []).filter((item) => !phraseKeys.has(compactPhraseKey(item?.text)))
-    ].slice(0, COMPACT_PHRASE_LIMIT);
+    if (!existingPrintEntry) {
+      state.compactPrintHistory = [entry, ...(state.compactPrintHistory || [])].slice(0, COMPACT_HISTORY_LIMIT);
+    }
+    const existingPhraseTexts = new Set(
+      (state.compactPhraseBank || [])
+        .map((item) => compactPhraseKey(item?.text))
+        .filter(Boolean)
+    );
+    const phraseEntries = extractCompactPhrasesFromPrint(clean, entry.id)
+      .filter((item) => !existingPhraseTexts.has(compactPhraseKey(item.text)));
+    if (phraseEntries.length) {
+      state.compactPhraseBank = [...phraseEntries, ...(state.compactPhraseBank || [])].slice(0, COMPACT_PHRASE_LIMIT);
+    }
     saveCompactData();
+  }
+
+  function compactHarvestScanText(text) {
+    return ` ${String(text || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim()} `;
+  }
+
+  function detectCompactKnownTermsInText(text) {
+    const haystack = compactHarvestScanText(text);
+    if (!haystack.trim()) return [];
+    const pool = (COMPACT_TERMS.length ? COMPACT_TERMS : TERMS)
+      .filter((term) => term?.p && term?.sec !== "connect");
+    const matches = [];
+    const consumed = [];
+    const seen = new Set();
+    const sorted = pool.slice().sort((a, b) => {
+      const aWords = compactHarvestScanText(a.p).trim().split(/\s+/).filter(Boolean).length;
+      const bWords = compactHarvestScanText(b.p).trim().split(/\s+/).filter(Boolean).length;
+      if (bWords !== aWords) return bWords - aWords;
+      const lenDiff = String(b?.p || "").length - String(a?.p || "").length;
+      if (lenDiff) return lenDiff;
+      return sortTerms([a, b])[0] === a ? -1 : 1;
+    });
+
+    for (const term of sorted) {
+      const key = termKey(term);
+      if (seen.has(key)) continue;
+      const needle = compactHarvestScanText(term.p);
+      if (!needle.trim()) continue;
+      let start = haystack.indexOf(needle);
+      while (start !== -1) {
+        const end = start + needle.length;
+        const overlaps = consumed.some((range) => Math.max(range.start, start) < Math.min(range.end, end));
+        if (!overlaps) {
+          seen.add(key);
+          consumed.push({ start, end });
+          matches.push({ start, term });
+          break;
+        }
+        start = haystack.indexOf(needle, start + 1);
+      }
+    }
+
+    return matches
+      .sort((a, b) => a.start - b.start)
+      .map((entry) => entry.term);
+  }
+
+  function harvestCompactKnownTermsFromText(text) {
+    const matchedTerms = detectCompactKnownTermsInText(text);
+    if (!matchedTerms.length) return [];
+    matchedTerms.forEach((term) => {
+      addTermToSession(term);
+      const route = activeCategoryRoute(term);
+      if (route === "instruments" || route === "vibes") {
+        upsertToolStateTerm(route, term);
+      }
+    });
+    queuePrefsSave();
+    return matchedTerms;
+  }
+
+  function ensureCompactArmedField(errorMessage) {
+    const activeField = resolveEditableField(document.activeElement);
+    if (activeField) armWriteField(activeField, { captureNow: true });
+    const field = currentWriteField();
+    if (field) return field;
+    setCompactStatus(errorMessage, "error");
+    render();
+    return null;
   }
 
   function useCompactHistoryEntry(entryId) {
@@ -3216,10 +4522,11 @@ ${body}
   }
 
   function useCompactPhraseEntry(entryId) {
-    const entry = (state.compactPhraseBank || []).find((item) => item.id === entryId);
+    const entry = (state.compactPhraseBank || []).find((item) => item.id === entryId)
+      || (state.compactManualPhraseBank || []).find((item) => item.id === entryId);
     if (!entry) return false;
-    setCompactComposeText(entry.text);
-    setCompactStatus(`Loaded phrase "${entry.text}" into Compose.`, "info");
+    if (!appendCompactComposeText(entry.text)) return false;
+    setCompactStatus(`Appended phrase "${entry.text}" to Compose.`, "info");
     render();
     return true;
   }
@@ -3227,35 +4534,77 @@ ${body}
   function appendCompactTermByKey(key) {
     const term = COMPACT_TERM_MAP.get(key) || TERM_MAP.get(key);
     if (!term) return false;
-    const text = activeInsertText(term, activeCategoryRoute(term) || "") || term.p;
+    const route = activeCategoryRoute(term) || "";
+    const text = activeInsertText(term, route) || term.p;
     if (!appendCompactComposeText(text)) return false;
+    if (route === "instruments" || route === "vibes") addTermToToolState(route, term);
     clearCompactStatus();
+    render();
+    return true;
+  }
+
+  function performCompactToolPrint(sec) {
+    const items = printableToolTexts(sec);
+    if (!items.length) {
+      setCompactStatus(`${toolLabel(sec)} tagger is empty.`, "error");
+      render();
+      return false;
+    }
+    const field = ensureCompactArmedField(`No page field armed. Click inside the target page field first, then print ${toolLabel(sec).toLowerCase()} tags.`);
+    if (!field) return false;
+    const printed = insertChips(items);
+    if (!printed) {
+      setCompactStatus(`Print failed for the armed page field. Re-arm the field and try printing ${toolLabel(sec).toLowerCase()} tags again.`, "error");
+      render();
+      return false;
+    }
+    snapshotArmedFieldSelection(field);
+    setCompactStatus(`Printed ${items.length} ${toolLabel(sec).toLowerCase()} tag${items.length === 1 ? "" : "s"} to the armed field.`, "success");
+    render();
+    return true;
+  }
+
+  function performCompactAppPrint() {
+    const text = String(state.compactComposeText || "").trim();
+    if (!text) {
+      setCompactStatus("Compose is empty.", "error");
+      render();
+      return false;
+    }
+    const { harvestedTerms } = captureCompactComposeOutput(text);
+    openCompactSitePrintPrompt(text);
+    setCompactStatus(
+      harvestedTerms.length
+        ? `Saved to the app, updated history and phrases, and harvested ${harvestedTerms.length} known term${harvestedTerms.length === 1 ? "" : "s"}.`
+        : "Saved to the app and updated history and phrases.",
+      "success"
+    );
     render();
     return true;
   }
 
   function performCompactPrint() {
     const text = String(state.compactComposeText || "").trim();
-    collectCompactUndefinedTerms(text);
     if (!text) {
       setCompactStatus("Compose is empty.", "error");
       render();
       return false;
     }
-    if (!currentWriteField()) {
-      setCompactStatus("Click the target page field first, then print.", "error");
-      render();
-      return false;
-    }
+    if (!ensureCompactArmedField("No page field armed. Click inside the target page field first, then press Print to Page.")) return false;
     const printed = insertIntoField(smartInsertTermText(text), false);
     if (!printed) {
-      setCompactStatus("Print failed for the currently armed field.", "error");
+      setCompactStatus("Print to Page failed for the armed page field. Re-arm the field and try again.", "error");
       render();
       return false;
     }
-    recordCompactPrint(text);
-    state.compactInterimTranscript = "";
-    setCompactStatus("Printed to the armed field and saved to history.", "success");
+    const { harvestedTerms } = captureCompactComposeOutput(text);
+    closeCompactSitePrintPrompt();
+    setCompactStatus(
+      harvestedTerms.length
+        ? `Printed to the page, updated history and phrases, and harvested ${harvestedTerms.length} known term${harvestedTerms.length === 1 ? "" : "s"}.`
+        : "Printed to the page and updated history and phrases.",
+      "success"
+    );
     render();
     return true;
   }
@@ -3339,21 +4688,36 @@ ${body}
       state.compactSpeechAvailable = compactSpeechAdapter.isAvailable();
       state.compactInterimTranscript = String(interimText || "").trim();
       if (finalText) {
-        appendCompactComposeText(finalText);
-        setCompactStatus("Transcript appended to Compose.", "success");
+        const appended = appendCompactDictationFinalText(finalText);
+        const executedCommand = _pendingCompactMicStopCommand?.command
+          ? executeCompactMicStopCommand()
+          : false;
+        if (appended && !executedCommand) {
+          setCompactStatus("Transcript appended to Compose.", "success");
+        }
       }
       render();
     });
     compactSpeechAdapter.onError(({ message }) => {
+      const shouldExecutePendingCommand = shouldExecuteCompactMicStopCommand();
       state.compactDictationActive = false;
       state.compactInterimTranscript = "";
       state.compactSpeechAvailable = compactSpeechAdapter.isAvailable();
+      if (shouldExecutePendingCommand) {
+        executeCompactMicStopCommand();
+        render();
+        return;
+      }
+      cancelCompactMicStopCommand();
       setCompactStatus(message || "Browser speech recognition failed.", "error");
       render();
     });
     compactSpeechAdapter.onStateChange(({ listening }) => {
       state.compactDictationActive = !!listening;
-      if (!listening) state.compactInterimTranscript = "";
+      if (!listening) {
+        state.compactInterimTranscript = "";
+        if (shouldExecuteCompactMicStopCommand()) executeCompactMicStopCommand();
+      }
       render();
     });
     state.compactSpeechAvailable = compactSpeechAdapter.isAvailable();
@@ -3368,6 +4732,7 @@ ${body}
     const adapter = ensureCompactSpeechAdapter();
     state.compactSpeechAvailable = adapter.isAvailable();
     if (!adapter.isAvailable()) {
+      cancelCompactMicStopCommand();
       state.compactDictationActive = false;
       state.compactInterimTranscript = "";
       setCompactStatus("Browser speech recognition is unavailable here. The rest of the compact tagger still works normally.", "error");
@@ -3375,12 +4740,15 @@ ${body}
       return false;
     }
     if (state.compactDictationActive) {
+      _compactMicStopRequested = true;
       adapter.stop();
+      scheduleCompactMicStopCommandExecution();
       setCompactStatus("Dictation stopped.", "info");
       render();
       return false;
     }
     try {
+      cancelCompactMicStopCommand();
       state.compactInterimTranscript = "";
       adapter.start();
       state.compactDictationActive = true;
@@ -3397,20 +4765,23 @@ ${body}
   }
 
   function handleGlobalHotkeys(event) {
+    if (isCompactOnlyRenderBindPath()) return;
     if (event.defaultPrevented || event.metaKey || event.ctrlKey) return;
     if (!pluginHotkeyContext()) return;
     const rawKey = String(event.key || "");
     const path = typeof event.composedPath === "function" ? event.composedPath() : [];
     const target = path[0] || event.target;
     const activeShadowEl = shadow?.activeElement;
-    const composerKeyActive = activeShadowEl?.id === "bp-composer-text";
+    const composerKeyActive = activeShadowEl?.id === "bp-composer-text" || activeShadowEl?.id === "bp-compact-compose";
     const myuiEditableTarget = isEditableNode(target) && isMyuiShadowNode(target) &&
-      target?.id !== "bp-search" && target?.id !== "bp-composer-text";
+      target?.id !== "bp-search" && target?.id !== "bp-composer-text" && target?.id !== "bp-compact-compose";
     const myuiEditableActive = isEditableNode(activeShadowEl) && isMyuiShadowNode(activeShadowEl) &&
-      activeShadowEl?.id !== "bp-search" && activeShadowEl?.id !== "bp-composer-text";
+      activeShadowEl?.id !== "bp-search" && activeShadowEl?.id !== "bp-composer-text" && activeShadowEl?.id !== "bp-compact-compose";
     if (composerKeyActive && (
       rawKey.length === 1 ||
       rawKey === "Backspace" || rawKey === "ArrowLeft" || rawKey === "ArrowRight" ||
+      rawKey === "ArrowUp" || rawKey === "ArrowDown" ||
+      rawKey === "Home" || rawKey === "End" ||
       rawKey === "Enter" || rawKey === "Tab"
     )) {
       return;
@@ -3594,6 +4965,7 @@ ${body}
 
 
   function handleGlobalHotkeysRelease(event) {
+    if (isCompactOnlyRenderBindPath()) return;
     if (event.defaultPrevented || event.metaKey || event.ctrlKey) return;
     if (!pluginHotkeyContext()) return;
     const rawKey = String(event.key || "");
@@ -3657,9 +5029,24 @@ ${body}
     host.addEventListener("mousedown", (e) => {
       // Prevent focus steal on all MYUI interactions
       // EXCEPT inputs inside the shadow (search, composer, editor cells)
-      const target = e.composedPath?.()?.[0] || e.target;
+      const rawTarget = e.composedPath?.()?.[0] || e.target;
+      const target = rawTarget?.nodeType === 1 ? rawTarget : rawTarget?.parentElement || e.target;
       const tag = target?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || target?.isContentEditable) return;
+      const buttonLike = target?.closest?.("button,a,[role=button]");
+      const toolChip = target?.closest?.("[data-tool-chipsec][data-tool-chip]");
+      if (isCompactOnlyRenderBindPath()) {
+        if ((buttonLike || toolChip) && shadow?.activeElement?.id === "bp-compact-compose") {
+          queueComposerRestoreSnapshot();
+        }
+        return;
+      }
+      if (buttonLike || toolChip) {
+        if (shadow?.activeElement?.id === "bp-compact-compose") {
+          queueComposerRestoreSnapshot();
+        }
+        return;
+      }
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target?.isContentEditable) return;
       e.preventDefault();
     }, true);
 
@@ -3677,17 +5064,27 @@ ${body}
     });
 
     document.addEventListener("pointerdown", (event) => {
-      if (!state.appActive || !state.sessionOpen || (!state.writeMode && !isCompactQuickTagMode())) return;
+      if (!shouldTrackDocumentArmedField()) return;
       const target = event.composedPath?.()?.[0] || event.target;
-      if (host?.contains(target)) return;
+      if (host?.contains(target) || isMyuiShadowNode(target)) return;
       const field = resolveEditableField(target);
       if (!field) return;
       armWriteField(field);
       captureArmedFieldSelectionFromPointer(field, event);
     }, true);
 
+    document.addEventListener("focusin", (event) => {
+      if (!shouldTrackDocumentArmedField()) return;
+      const target = event.composedPath?.()?.[0] || event.target;
+      if (host?.contains(target) || isMyuiShadowNode(target)) return;
+      const field = resolveEditableField(target);
+      if (!field) return;
+      const changed = armWriteField(field, { captureNow: true });
+      if (changed && isCompactQuickTagMode()) render();
+    }, true);
+
     document.addEventListener("selectionchange", () => {
-      if (!state.appActive) return;
+      if (!shouldTrackDocumentArmedField()) return;
       const field = currentWriteField();
       if (!field) return;
       const active = document.activeElement;
@@ -3699,7 +5096,7 @@ ${body}
 
     document.addEventListener("focusout", () => {
       setTimeout(() => {
-        const field = lastFocusedField;
+        const field = getStoredArmedField();
         if (field && !document.contains(field)) {
           clearArmedField(field);
           render();
@@ -3708,55 +5105,69 @@ ${body}
     }, true);
 
     setInterval(() => {
-      if (lastFocusedField && !document.contains(lastFocusedField)) {
-        clearArmedField(lastFocusedField);
+      const field = getStoredArmedField();
+      if (field && !document.contains(field)) {
+        clearArmedField(field);
       }
     }, 1000);
 
-    document.addEventListener("keydown", handleGlobalHotkeys, true);
-    document.addEventListener("keyup", handleGlobalHotkeysRelease, true);
+    if (shouldInstallLegacyDocumentHotkeys()) {
+      document.addEventListener("keydown", handleGlobalHotkeys, true);
+      document.addEventListener("keyup", handleGlobalHotkeysRelease, true);
+    }
+    if (shouldInstallCompactWindowHotkeys()) {
+      document.addEventListener("keydown", handleCompactWindowHotkeys, true);
+    }
     document.addEventListener("keydown", handleToolTrayKeys, true);
 
     window.addEventListener("myui:toggle", () => {
       if (!_initReady) { _pendingToggle = !_pendingToggle; return; }
       state.appActive = !state.appActive;
       if (state.appActive) {
-        state.visible = true;
-        state.sessionOpen = true;
-        state.quickComposePinned = true;
-        state.listenMode = "word";
-        startListening();
+        if (isCompactQuickTagMode()) enterCompactQuickTagMode();
+        else {
+          state.visible = true;
+          state.sessionOpen = true;
+          state.quickComposePinned = true;
+          state.listenMode = "word";
+        }
+        if (shouldStartLegacyListenRuntime()) startListening();
       } else {
-        stopListening();
-        clearSessionWorkingState({ closeSessionUi: true, closeComposerUi: true, closeToolTrays: true });
+        if (state.compactDictationActive) toggleCompactDictation();
+        if (shouldStartLegacyListenRuntime()) stopListening();
         state.visible = false;
       }
       render();
     });
 
     Promise.all([loadPrefs(), loadMasterRows(), loadCompactSourceRows(), loadCompactData(), loadStyles()]).finally(() => {
+      finalizeCompactLibraryState();
       rebuildRuntimeData();
       state.queryInput = typeof state.queryInput === "string" ? state.queryInput : state.query;
       state.query = typeof state.query === "string" ? state.query : String(state.queryInput || "").trim();
       state.compactSpeechAvailable = compactSpeechAvailable();
       _initReady = true;
-      console.log(`[MYUI] build ${MYUI_BUILD}`);
       if (_pendingToggle) {
         _pendingToggle = false;
         state.appActive = !state.appActive;
         if (state.appActive) {
-          state.visible = true;
-          state.sessionOpen = true;
-          state.quickComposePinned = true;
-          state.listenMode = "word";
+          if (isCompactQuickTagMode()) enterCompactQuickTagMode();
+          else {
+            state.visible = true;
+            state.sessionOpen = true;
+            state.quickComposePinned = true;
+            state.listenMode = "word";
+          }
         } else {
+          if (state.compactDictationActive) toggleCompactDictation();
           state.visible = false;
         }
       }
       state.quickComposePinned = true;
       state.listenMode = "word";
-      if (state.appActive) state.sessionOpen = true;
-      startListening();
+      if (state.appActive && isCompactQuickTagMode()) enterCompactQuickTagMode();
+      else if (state.appActive) state.sessionOpen = true;
+      if (shouldStartLegacyListenRuntime()) startListening();
       render();
       window.addEventListener("resize", () => {
         state.panelWidth = clamp(state.panelWidth, PANEL_MIN_WIDTH, Math.min(window.innerWidth - 20, PANEL_MAX_WIDTH));
@@ -3769,6 +5180,36 @@ ${body}
         state.sessionY = sessionPos.y;
         state.sessionWidth = sessionPos.width;
         state.sessionHeight = sessionPos.height;
+        const compactTermsPos = clampSessionPosition(state.compactTermsX, state.compactTermsY, state.compactTermsWidth, state.compactTermsHeight);
+        state.compactTermsX = compactTermsPos.x;
+        state.compactTermsY = compactTermsPos.y;
+        state.compactTermsWidth = compactTermsPos.width;
+        state.compactTermsHeight = compactTermsPos.height;
+        const compactTagsPos = clampSessionPosition(state.compactTagsX, state.compactTagsY, state.compactTagsWidth, state.compactTagsHeight);
+        state.compactTagsX = compactTagsPos.x;
+        state.compactTagsY = compactTagsPos.y;
+        state.compactTagsWidth = compactTagsPos.width;
+        state.compactTagsHeight = compactTagsPos.height;
+        const compactPrintsPos = clampSessionPosition(state.compactPrintsX, state.compactPrintsY, state.compactPrintsWidth, state.compactPrintsHeight);
+        state.compactPrintsX = compactPrintsPos.x;
+        state.compactPrintsY = compactPrintsPos.y;
+        state.compactPrintsWidth = compactPrintsPos.width;
+        state.compactPrintsHeight = compactPrintsPos.height;
+        const compactPhrasesPos = clampSessionPosition(state.compactPhrasesX, state.compactPhrasesY, state.compactPhrasesWidth, state.compactPhrasesHeight);
+        state.compactPhrasesX = compactPhrasesPos.x;
+        state.compactPhrasesY = compactPhrasesPos.y;
+        state.compactPhrasesWidth = compactPhrasesPos.width;
+        state.compactPhrasesHeight = compactPhrasesPos.height;
+        const compactSessionTermsPos = clampSessionPosition(
+          state.compactSessionTermsX,
+          state.compactSessionTermsY,
+          state.compactSessionTermsWidth,
+          state.compactSessionTermsHeight
+        );
+        state.compactSessionTermsX = compactSessionTermsPos.x;
+        state.compactSessionTermsY = compactSessionTermsPos.y;
+        state.compactSessionTermsWidth = compactSessionTermsPos.width;
+        state.compactSessionTermsHeight = compactSessionTermsPos.height;
         render();
       });
       const persistOnLifecycle = () => savePrefs();
@@ -3863,13 +5304,42 @@ ${body}
     PANEL_MIN_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_HEIGHT, PANEL_MAX_HEIGHT,
   });
 
-  async function loadStyles() {
+  function assetUrl(path) {
+    const safePath = String(path || "").replace(/^\/+/, "");
     try {
-      const url = chrome.runtime.getURL("styles.css");
-      const response = await fetch(url);
-      const css = await response.text();
-      if (styleNode) styleNode.textContent = css;
+      if (chrome?.runtime?.getURL) return chrome.runtime.getURL(safePath);
     } catch (_) {}
+    const base = String(globalThis.__MYUI_ASSET_BASE__ || "").trim();
+    if (!base) return "";
+    try {
+      return new URL(safePath, base).toString();
+    } catch (_) {
+      return `${base.replace(/\/?$/, "/")}${safePath}`;
+    }
+  }
+
+  async function loadStyles() {
+    const url = assetUrl("styles.css");
+    if (!url) {
+      console.warn("[MYUI] Failed to resolve styles.css URL.");
+      return;
+    }
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.warn(`[MYUI] Failed to load styles.css (${response.status}).`, url);
+        return;
+      }
+      const css = await response.text();
+      if (!styleNode) {
+        console.warn("[MYUI] Shadow style node was missing when styles.css loaded.");
+        return;
+      }
+      styleNode.textContent = css;
+      if (!css.trim()) console.warn("[MYUI] Loaded empty styles.css text.", url);
+    } catch (error) {
+      console.warn("[MYUI] Failed to load styles.css.", error);
+    }
   }
 
   async function devReset() {
@@ -3900,12 +5370,14 @@ ${body}
     state.quickPhrasesOrderMode = "user";
     state.undefinedTerms = [];
     CUSTOM_TERM_ENTRIES = [];
+    COMPACT_ACTIVE_ROWS = [];
+    LEGACY_COMPACT_CUSTOM_ENTRIES = [];
     state.compactPrintHistory = [];
     state.compactPhraseBank = [];
+    state.compactManualPhraseBank = [];
     COMPACT_SOURCE_ROWS = [];
     COMPACT_TERMS = [];
     COMPACT_TERM_MAP = new Map();
-    console.log(`[MYUI] devReset — hard reset complete (build ${MYUI_BUILD})`);
     window.location.reload();
   }
 
@@ -4055,7 +5527,9 @@ ${csv}`;
   }
 
   // ── Render module (loaded from render.js) ─────────────────────────────────
-  const createRenderModule = globalThis.__MYUI_createRenderModule;
+  const createRenderModule = ACTIVE_RENDER_BIND_PATH === "compact-only"
+    ? (globalThis.__MYUI_createCompactRenderModule || globalThis.__MYUI_createRenderModule)
+    : globalThis.__MYUI_createRenderModule;
 
   const {
     render,
@@ -4098,8 +5572,13 @@ ${csv}`;
     composerPillsFromPendingText,
     // — compact quick-tag —
     isCompactQuickTagMode, compactVisibleGroups, compactGroupOptions,
-    queueCompactCustomTerm, appendCompactTermByKey, performCompactPrint,
-    useCompactHistoryEntry, useCompactPhraseEntry, saveCompactCustomTerm, toggleCompactDictation,
+    enterCompactQuickTagMode, enterLegacyQuickTagMode,
+    compactComposeHasMeaningfulText, openCompactSitePrintPrompt, closeCompactSitePrintPrompt,
+    resetCompactLibraryToDefault, exportCompactLibraryFiles, importCompactLibraryFile,
+    clearCompactMicStopCommand, cancelCompactMicStopCommand, queueCompactCustomTerm, appendCompactComposeText, appendCompactTermByKey, performCompactAppPrint, performCompactPrint, performCompactToolPrint,
+    useCompactHistoryEntry, useCompactPhraseEntry, addCompactManualPhrase, saveCompactCustomTerm, toggleCompactDictation,
+    deleteCompactHistoryEntry, deleteCompactPhraseEntry, deleteCompactUndefinedEntry,
+    clearCompactSessionData, clearCompactSessionTerms, deleteCompactSessionTerm,
     collectCompactUndefinedTerms,
     // — input snapshots —
     searchInputSnapshot, restoreSearchInput,
@@ -4116,10 +5595,11 @@ ${csv}`;
     // — tool tray ops —
     getToolList, activeInsertText, toolButtonLabel, toolLabel,
     toolItemText, toolItemDisplay, toolItemLabel,
+    printableToolTexts, isToolTrayOpen, isToolTrayExpanded,
     setToolTrayOpen, setToolTrayExpanded, toggleToolTray, ensureToolTrayOpen,
-    undoToolHistory,
+    pushToolHistory, undoToolHistory, redoToolHistory,
     // — persist —
-    savePrefs, saveCompactData, saveMasterRows, restoreDefaultMasterRows,
+    savePrefs, saveCompactData, saveMasterRows, restoreDefaultMasterRows, queuePrefsSave,
     validateAndSetInputTerms, parseInputTerms,
     exportMasterCsv, exportPlist, downloadText,
     // — editor ops —
@@ -4132,7 +5612,7 @@ ${csv}`;
     resolveEditableField, armWriteField, captureArmedFieldSelectionFromPointer,
     focusComposerAfterArming,
     // — term activation —
-    handleTermActivation, flashTermByKey, insertIntoField, routeInsert,
+    termByKey, handleTermActivation, flashTermByKey, insertIntoField, routeInsert,
     smartInsertTermText,
     // — audio —
     startListening, stopListening,
